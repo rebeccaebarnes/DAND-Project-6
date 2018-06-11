@@ -1,4 +1,11 @@
-Presidential Campaign Contributions - Ohio 2016
+---
+title: "Presidential Campaign Contributions - Ohio 2016"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
 ========================================================
 
 ```{r packages, echo=FALSE, message=FALSE, warning=FALSE}
@@ -25,7 +32,7 @@ require(maps)
 
 # Introduction
 
-On the evening of November 8, 2016 many people in North America were surprised when it became increasingly clear that Donald Trump would convincingly win the election for President of the United States. It wasn't just people sitting in their armchairs at home, it was also political pundits, many of whom had talked about Hillary Clinton leading the polls in the lead up. 
+On the evening of November 8, 2016 many people in North America were surprised when it became increasingly clear that Donald Trump would convincingly win the election for President of the United States. It wasn't just people sitting in their armchairs at home, it was also political pundits, many of whom had talked about Hillary Clinton leading the polls as the election date drew closer. 
 
 One question that has been asked is why did so many political analysts get their predictions wrong? Was the information necessary to make the correct predictions available but simply ignored? 
 
@@ -535,7 +542,7 @@ ggplot() +
 
 ```
 
-The plot showed a concentration of votes around the cities (with some spread, possibly because residential zipcodes are often further out from the city center). This mirrored what we saw when examining in the dividual cities, including some areas where very few contributions were made.
+In this plot, the darker the dot, the more contributions were made. We can see a concentration of votes around the cities (with some spread, possibly because residential zipcodes are often further out from the city center). This mirrored what we saw when examining in the dividual cities, including some areas where very few contributions were made.
 
 ## Contributions per County
 
@@ -761,6 +768,7 @@ ggplot(data = ohio.2016,
   geom_bar(stat = "identity") +
   scale_fill_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
                     guide = guide_legend(title = 'Candidate Alignment')) +
+  scale_y_continuous(labels = comma) +
   ggtitle("Total Value of Contributions Per Candidate") +
   labs(y = "Value of Contributions($)", x = "Candidate Name") +
   theme(axis.text.x = element_text(angle=60, hjust=1))
@@ -1391,8 +1399,7 @@ For Democrats, the value of contributions per week starts off low and generally 
 
 For Republicans, the value of contributions per week starts high, spikes up and down to dropping very low and then spikes back up again. 
 
-While I planned to stick with finding a single point in time to use as a predictor, if time course information were used, the different patterns in contribution rates for the different political alignmetns could give some insight into how tracking the information over time, and using this to inform predictions, could be confusing - depending on when you picked for your time course, the data shows differing support for candidates of the political alignments. 
-It gives a clear visualization of the median value of contributions towards candidates of the different political parties over time. **Add more info**
+While I planned to stick with finding a single point in time to use as a predictor, if time course information were used, the different patterns in contribution rates for the different political alignmetns could give some insight into how tracking the information over time, and using this to inform predictions, could be confusing - depending on when you picked for your time course, the data shows differing support for candidates of the political alignments. It gives a clear visualization of the median value of contributions towards candidates of the different political parties over time.
 
 ### Faceted by Election Type
 
@@ -1545,13 +1552,13 @@ Adding in the election type showed another layer of interaction. The correlation
 
 For the Democratic candidate, correlations remained relatively unchanged from what was found above across each election.
 
-* Primary: 0.121, 95% confidence interval - 0.107 to 0.136
-* General: 0.108, 95% confidence interal - 0.097 to 0.119
+* **Primary**: 0.121 (95% confidence interval - 0.107 to 0.136)
+* **General**: 0.108 (95% confidence interal - 0.097 to 0.119)
 
 For the Republican candidate, for primary election contributions, the correlation between contribution values and the general election vote count was actually negative, but it became slightly positive for the general election. 
 
-* Primary: -0.0199, 95% confidence interval - -0.0386 to -0.0013
-* General: 0.0906, 95% confidence interval - 0.0709 to 0.1103
+* **Primary**: -0.0199 (95% confidence interval - -0.0386 to -0.0013)
+* **General**: 0.0906 (95% confidence interval - 0.0709 to 0.1103)
 
 However, even with these inclusions it still felt like much less of the differences in the data were being explained than could be expected. 
 
@@ -1613,15 +1620,11 @@ grid.arrange(p3, p4, ncol = 2)
 
 ```
 
-And with this, we can see so many of the different elements of what we have been discussing layered on top of each other. 
-
-We can see a lot more contributions for Republican candidates in the primary election, and a weighting towards the Democratic candidate for the general election. 
-
-We can also see clusters of support for Republican or Democratic candidates that often fall within county boundaries. 
+And with this, we can see so many of the different elements of what we have been discussing layered on top of each other. We can see a lot more contributions for Republican candidates in the primary election, and a weighting towards the Democratic candidate for the general election. We can also see clusters of support for Republican or Democratic candidates that often fall within county boundaries. 
 
 ### Relative Election Results by County
 
-This suggested that the location of where the contribution was made might be the missing factor in understanding the relationship to the final election results.
+This suggested that where the contribution was made might be the missing factor in understanding the relationship to the final election results.
 
 ```{r rearrange data to wide, echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -1676,7 +1679,7 @@ ohio.map <- arrange(ohio.map, group, order)
 
 ```
 
-### Relative Vote Count by Party per County
+#### Relative Vote Count by Party per County
 
 To determine whether the map of the contributions related to the election results, I decided to find the relative difference in vote counts between the candidates of the two major parties. If the Democratic candidate had received more votes, the county would be blue, and if the Republican candidate had received more votes, the county would be red. 
 
@@ -1708,7 +1711,7 @@ The plot did start to highlight some of the concentrations but it didn't allow f
 
 (It is a good reminder that when determining election results, boundaries for electoral areas don't always match county areas, but it does remain a good long term comparison categorization) 
 
-### Relative Vote Percent by Party per County
+#### Relative Vote Percent by Party per County
 
 To reduce the impact of skew in result counts, I completed the same plots using percentage of votes (which acts similarly to finding the log10 of the differences, which is what we had done for vote counts in the scatterplot).
 
@@ -1746,7 +1749,7 @@ And finally we start to see a clear relationship about where contributions are h
 
 This also explains why the correlation of vote counts and total contribution values had such different value when compared to the individual contribution values. The contribution values had been totaled according to county to correlate them with the county vote results. This inherently factored in the interaction that is found with location.
 
-## Facet Scatterplot by Candidate Alignment and County
+### Facet Scatterplot by Candidate Alignment and County
 
 I finally realized that the interaction that I was missing from my scatterplot explorations was geography. 
 
@@ -2174,14 +2177,13 @@ altModel
 
 ```
 
-
 This model is much simpler than the full model and still explains 95.2% of the variance in the data. If it can reduce variability in predictions, it could be very helpful to use.
 
-This model functions in a similar fashion to the above, with all of the details related to county removed.
+The model functions in a similar fashion to the above, with all of the details related to county removed.
 
 ### Predicting Results
 
-Now that I had the model(s) explained, I wanted to look at the capabilities of the model to predict election results. Based on what I had seen of the prediction capabilities of the model, I decided to select a county that had contribution values for the general and primary elections from \$8,000 to \$50,000.
+Now that I had the model(s) explained, I wanted to look at the capabilities of the model to predict election results. Based on what I had seen from the functionality plots of the model, I decided to select a county that had contribution values for the general and primary elections from \$8,000 to \$50,000 (Where there was the smallest amount of prediction error observered).
 
 ```{r select counties, echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -2608,11 +2610,11 @@ combined_plot(model_data = modelData.comb,
 
 ```
 
-So what does this tell us? First of all, let's confirm what all of the lines and shading mean. The solid lines show the actual vote count that was found for the county. The dashed lines show what was predicted from the contribution totals from each election type. 
+So what does this tell us? First of all, let's confirm what all of the lines and shading mean. The solid lines show the actual vote count that was found for the county. The dashed lines show what was predicted from the contribution totals for each election type. 
 
-The shaded areas show the range of values that fall within a certain confidence interval. For example, for the predictions for the votes for the Democratic candidate from the primary election contributions, at a confidence interval of 40%, the vote count values range from around 25,000 to slightly under 50,000. We would say that we are 40% confident that the actual vote count value falls in this range. If we look at the solid blue line, it does fall within this range. So that is good for the model. 
+The shaded areas show the range of values that fall within a certain confidence interval. For example, for the prediction of the votes for the Democratic candidate from the primary election contributions, at a confidence level of 40%, the vote count values range from around 25,000 to slightly under 50,000. We would say that we are 40% confident that the actual vote count value falls in this range. If we look at the solid blue line, it does fall within this range. So that is good for the model. 
 
-So looking at the two charts, here's how it all falls out.
+Looking at the details of the two charts, here's how it all falls out.
 
 **Primary**
 
@@ -2635,7 +2637,7 @@ Here we start to run into some problems. The predictions for the Democratic cand
 I wanted to compare this to the predictions for the alternate model, but first, here are some other things I observed about the charts.
 
 * Across the plots, the shaded areas are the same shape. This isn't something that I had expected but makes sense since they are coming from the same model.
-* There is a much greater range in the values the create the lower and upper confidence interval boundaries. While this is to be expected, I noticed that the increases were exponentially related, which is a result of the prediction model using the log of both contribution values and vote counts. 
+* There is a broad range in the values that create the lower and upper confidence interval boundaries as we move through the confidence levels. While this is to be expected, I noticed that the increases were exponentially related, which is a result of the prediction model using the log of both contribution values and vote counts. 
 * This also means that if you track the lower bound values of the confidence interval, there is much less range in these values. For the predictions from the primary election contributions, the lower bound confidence interval values range from slight over \$25,000 at a 35% confidence interval to just over \$10,000 for the 95% confidence interval. For the upper boundary of the confidence intervals, the values range from approximately 40,000 votes to approximately 150,000 votes.
 
 #### Comparison to Alternate Model
@@ -2651,21 +2653,21 @@ combined_plot(model_data = modelData.comb,
 
 ```
 
-The first thing that is noticeable about these predictions is that for predictions from both the primary and general election contributions are in the correct direction. In addition, the reason that you cannot see the red dashed line for predicting the results for the Republican candidate from the primary election contributions is because it is covered by the actual line - the model predicted the actual result!
+The first thing that is noticeable about these plots is that the predictions from both the primary and general election contributions are in the correct direction. In addition, the reason that you cannot see the red dashed line for predicting the results for the Republican candidate from the primary election contributions is because it is covered by the actual line - the model predicted the actual result!
 
-When comparing the predictions of the two models, the range of the 95% confidence interval is typically greater for the alternate model, but the differences between the predicted values and the actual values are actually smaller. 
+When comparing the predictions of the two models, the range of the 95% confidence interval is typically greater for the alternate model, but the differences between the predicted values and the actual values are smaller. 
 
 I completed this type of comparison for multiple counties and discovered that this patterns were quite consistent - the original model would sometimes get the order of the predictions flipped, and the differences in predicted and actual values were closer for the alternate model. 
 
 As a result, **I decided to continue with the alternate model**.
 
-One of the things I found interesting about this process is the model that explained the lower amount of variance was actually better at predicting the results. I had recently read an article, aptly called ["Is R-Squared Useless?"](http://data.library.virginia.edu/is-r-squared-useless/) where the author discusses how using the amount of variance explained may not be a good method of selecting models for prediction, and that instead, the predictions from the model should be compared and tested and the model selected based on these results. (Which is what I did!) I had wondered if these types of circumstances were more rare and not something that I would encounter, but I apparently discovered this to be true with the very first model I created! 
+One of the things I found interesting about this process is the model that explained the lower amount of variance was actually better at predicting the results. I had recently read an article, aptly called ["Is R-Squared Useless?"](http://data.library.virginia.edu/is-r-squared-useless/), where the author discusses how using the amount of variance explained may not be a good method of selecting models for prediction, and that instead, the predictions from the model should be compared and tested and the model selected based on these results. (Which is what I did!) I had wondered if these types of circumstances were more rare and not something that I would encounter, but I apparently discovered this to be true with the very first model I created! 
 
 #### Comparison Across Counties 
 
 Now that I had selected my model, I wanted to see how it ran across a number of different scenarios. I wanted to look at counties that had wins for Democrats and Republicans and when the final vote counts were close, and also at different ranges of contribution values. 
 
-##### Close Results
+**Close Results**
 
 ```{r model comparison montgomery, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
 
@@ -2677,11 +2679,11 @@ combined_plot(model_data = modelData.comb,
 
 ```
 
-In this case, the results for the two candidates were very close. I was excited to see that the model did predict the correct order for results, more votes for the Republican candidate than the Democratic candiate. In this case, the predictions from the primary election contributions were much closer to the actual results than those from the general election contributions. 
+In this case, the results for the two candidates were very close. I was excited to see that the model did predict the correct order for results - more votes for the Republican candidate than the Democratic candiate. In this case, the predictions from the primary election contributions were much closer to the actual results than those from the general election contributions. 
 
 One thing that is worth pointing out here is that typically in these types of circumstances, to say that a difference exists you would want the range of the confidence intervals to actually not overlap. So far, while we've seen predictions in the correct direction, we've not found a case where there isn't an overlap - something to keep an eye on. 
 
-##### Republican Win - Lower Range
+**Republican Win - Lower Range**
 
 ```{r model comparison erie, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
 
@@ -2693,9 +2695,9 @@ combined_plot_low(model_data = modelData.comb,
 
 ```
 
-In this case, the predictions form the general election were more accurate - the predictions from the primary underestimate the results - but each had a reasonable prediction of the relative diferences between the votes. 
+In this case, the predictions from the general election were more accurate - the predictions from the primary underestimate the results - but each had a reasonable prediction of the relative diferences between the votes. 
 
-##### Republican Win - Higher Range
+**Republican Win - Higher Range**
 
 ```{r model comparison warren, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
 
@@ -2707,9 +2709,9 @@ combined_plot_high(model_data = modelData.comb,
 
 ```
 
-A similar pattern as was found above is seen. Again, the predictions from the general election were more accurate - and actually incredibly close. Both got the order correct and the predictions from the primary had a similar difference betwen the candidates but underestimate the result counts. 
+A similar pattern as was found above is seen. Again, the predictions from the general election were more accurate, and actually incredibly close. Both got the order correct and the predictions from the primary had a similar difference betwen the candidates but underestimated the result counts. 
 
-##### Democrat Win
+**Democrat Win**
 
 ```{r model comparison lucas, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
 
@@ -2721,11 +2723,11 @@ combined_plot(model_data = modelData.comb,
 
 ```
 
-So far, all of the counties we had viewed had wins for the Republican candidates, so I wanted to see how well the model did at prediction when the Democratic candidate won. 
+So far, all of the counties we have viewed had wins for the Republican candidate, so I wanted to see how well the model did at prediction when the Democratic candidate won. 
 
 For the first county I selected it did not look good. Predictions from both the primary and general election contributions had the Republican candidate winning. I looked into this further and discovered that in this county, while the Democractic candidate did win, the contributions for the Democratic candidate were quite a bit lower than for the Republican candidate, so I decided to look at some other counties. 
 
-##### Democrat Win - Lower Range
+**Democrat Win - Lower Range**
 
 ```{r model comparison athens, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
 
@@ -2741,7 +2743,7 @@ Now the model was able to predict the win for the Democratic candidate over the 
 
 This is the first time that we've seen a clear difference in the shaded areas, but the predicted difference between the vote counts was much greater than the actual difference. 
 
-##### Democrat Win - Higher Range
+**Democrat Win - Higher Range**
 
 ```{r model comparison hamilton, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
 
@@ -2755,7 +2757,7 @@ combined_plot_high(model_data = modelData.comb,
 
 The order of predictions is once again correct, with a more accurate prediction from the general election contributions. Both models do predict a relatively small difference between the two candidates. 
 
-# Summary of Findings from Multivariate Analysis
+## Summary of Findings from Multivariate Analysis
 
 ### Key Findings
 
@@ -2767,22 +2769,22 @@ I also observed that county as a mitigating factor in the investigation of how c
 
 ### Surprising Elements
 
-Perhaps the most surprising element is that while I was able to find interactions between the other variables and the primary relationship, I was still able to explain less variation than I would have expected. 
+Perhaps the most surprising element is that while I was able to find interactions between the other variables and the primary relationship, I was still able to explain less variance than I would have expected using individual contributions. 
 
 ### Model Strengths and Weakenesses
 
 Creation of the model also resulted in some surprises. I wasn't able to find the strength of relationship for prediction of vote counts based on individual contributions that I was hoping to find and so switched to using the totals of contributions per county. 
 
-The original model I proposed explained over 98% of the variance, but I noticed that from a prediction perspective it suffered from some heteroscadacity that might impact the quality of its predictions. This ended up being the case and so the alternate model that I moved forward with explained slightly less variance at approximately 95% but was still quite substantial in the variance it explained.
+The original model I proposed explained over 98% of the variance, but I noticed that from a prediction perspective, it suffered from some heteroscadacity that might impact the quality of its predictions. This ended up being the case and so I moved forward with the alternate model. It explained slightly less variance at approximately 95% but this was still quite substantial in the amount of explained variance.
 
-In terms of predicting what I set out to predict - the numbers of vote counts from contribution values, the model did well in some areas but also had weaknesses. It did quite well at predicting the order of votes counts (who would win), but the confidence intervals for the ranges in the values were very large, even at low confidence intervals, there was often not a difference observed between the confidence intervals for the candidates of the two major parties. 
+In terms of predicting what I set out to predict - the numbers of vote counts from contribution values, the model did well in some areas but also had weaknesses. It did quite well at predicting the order of votes counts (who would win), but the confidence intervals for the ranges in the values were very large. Even at low confidence percentages, there was often not a difference observed between the confidence intervals for the candidates of the two major parties. 
 
 In addition, the following was observed: 
 
 * Results were more accurate for Republican vote counts 
 * General was typically more accurate than the Primary
 * While the model can correctly predict wins for Republican and Democratic candidates, it is susceptible to errors when wins are associated with a much lower total value of contributions. 
-* Of the counties reviewed, the model correctly predicted the direction in 6 out of the 7 counties (85.7%)
+* Of the counties reviewed, the model correctly predicted the direction of vote counts in 6 out of the 7 counties (85.7%)
 
 ------
 
@@ -2865,17 +2867,17 @@ The final success was building the model. While it didn't do exactly what I had 
 
 ## Challenges
 
-Definitely the most challenging, or time consuming, component of the process was the data cleaning. This was a dataset about which I had no previous knowledge (apart from generally being aware of what happens in US elections) to inform my investigation of the data. I had to research most elements of the data to confirm how they functioned, to understand what I could and couldn't drop. Understanding how refunds could work, to finally make a decision to simply drop all associated records took the better part of a day!
+Definitely the most challenging, or time consuming, component of the process was the data cleaning. This was a dataset about which I had no previous knowledge (apart from generally being aware of what happens in US elections) to inform my investigation of the data. I had to research most elements of the data to confirm how they functioned, to understand what I could and couldn't drop. Understanding how refunds could work, to finally make a decision to simply drop all associated records, took the better part of a day!
 
-Another thing that I found somewhat challenging was compartmentalizing and limiting my thought progression to move from univariate, to bivariate, to multivariate. I kept wanting to run ahead as I could see different elements playing in. However, by disciplining myself to focus on which section I was currently working on, I was able to find insights that I may not have otherwise found and I did gain a much better understanding of the data as a whole. When I finally got around to modelling the data, the step by step process became even more understandable as this step-wise progression is also how we enter data into the model and it makes sense for us to fully understand the relationships at each level to help us to decide what should be included in the model. 
+Another thing that I found somewhat challenging was compartmentalizing and limiting my thought progression to move from univariate, to bivariate, to multivariate. I kept wanting to run ahead as I could see different elements playing in. However, by disciplining myself to focus on the section on which I was currently working, I was able to find insights that I may not have otherwise found and I did gain a much better understanding of the data as a whole. When I finally got around to modelling the data, the step by step process became even more understandable as this step-wise progression is also how we enter data into the model, and it makes sense for us to fully understand the relationships at each level to help us to decide what should be included in the model. 
 
-My final challenges relate more to continuing to learn how to code. There were a couple of times where a had built a foundational plot or set of variables and then built other elements of the investigation off of this. I sometimes decided that I wanted to change a name or function of the foundational components and this would set off a chain reaction of errors. It reinforces to make sure you are happy with what you are doing originally before moving on and building on it!
+My final challenges related more to continuing to learn how to code. There were a couple of times where a had built a foundational plot or set of variables and then built other elements of the investigation off of this. I sometimes decided that I wanted to change a name or function of the foundational components and this would set off a chain reaction of errors. It reinforced that I need to make sure that I am happy with the original structure before moving on and building on it!
 
 ## Missing Elements and Potential Next Steps
 
 The largest missing element from this work, in my opinion, is the large confidence interval ranges that were found with the prediction model. Even at relatively low confidence interval percentages, the range of predicted vote counts was still often quite high. 
 
-I believe that a large source of this is that when the contribution values are totaled, the sum to a relatively small number of comparisons, just over 400 observations. When this information is split out into counties, it becomes even smaller. One of the potential ways to remedy this would be to utilize bootstrapping to create more robust sampling. It would be possible to take the original set of over 150,000 contributions and randomly sample them to build up many different representations of the possible combinations of vote counts and total contributions per county. This could then be combined together in building the model to hopefully reduce the range of the confidence intervals. 
+I believe that a large source of this is that when the contribution values are totaled, it results in a relatively small number of comparisons - just over 400 observations. When this information is split out into counties, it becomes even smaller. One of the potential ways to remedy this could be to utilize bootstrapping to create more robust sampling. It would be possible to take the original set of over 150,000 contributions and randomly sample them to build up many different representations of the possible combinations of vote counts and total contributions per county. This could then be combined together in building the model to hopefully reduce the range of the confidence intervals. 
 
 There are also a number of additional steps that could be taken to further explore the work that I have done. 
 
@@ -2884,4 +2886,4 @@ There are also a number of additional steps that could be taken to further explo
 3. I used a very late time in the election cycle (data up to a few days beforehand), it would be interesting to see what predictions are possible earlier on, even predicting from the primary contributions with this model seemed useful in predicting the winner. 
 4. Given that Ohio does have bellwether counties it could be interesting to build a model that just predicts using information from those states. Essentially this and the point above are interested in, "What is the minimum amount of data you would need to still consistently predict the outcome?"
 
-The final additional development, that I think could yield some productive results, would be to rebuild the modelling but instead of predicting vote counts, only predict the win or loss of a candidate. This may prove more successful increasing confidence that differences between the candidates are seen.
+The final additional development, that I think could yield some productive results, would be to rebuild the modelling by predicting a candidates win or less, instead of the actual vote counts. This may prove more successful in increasing confidence that differences between the candidates are seen.
