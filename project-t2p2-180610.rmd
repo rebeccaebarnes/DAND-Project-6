@@ -1,0 +1,2887 @@
+Presidential Campaign Contributions - Ohio 2016
+========================================================
+
+```{r packages, echo=FALSE, message=FALSE, warning=FALSE}
+
+#install.packages('maps')
+
+library(ggplot2)
+library(scales)
+library(plyr)
+library(dplyr)
+library(maps)
+library(GGally)
+library(gridExtra)
+library(reshape2)
+library(memisc)
+library(lattice)
+library(MASS)
+library(RCurl)
+library(bitops)
+
+require(maps)
+
+```
+
+# Introduction
+
+On the evening of November 8, 2016 many people in North America were surprised when it became increasingly clear that Donald Trump would convincingly win the election for President of the United States. It wasn't just people sitting in their armchairs at home, it was also political pundits, many of whom had talked about Hillary Clinton leading the polls in the lead up. 
+
+One question that has been asked is why did so many political analysts get their predictions wrong? Was the information necessary to make the correct predictions available but simply ignored? 
+
+To answer this question, I turned to Ohio. Ohio is considered a [bellwether state](https://en.wikipedia.org/wiki/Bellwether) for presidential elections. It has the longest running streak of backing the elected candidate in a presidential race of all US states, with a perfect record of backing the president elect since 1964. It also has the highest percentage of correct backings since 1896 and has the lowest deviation from the national results on average. 
+
+Within Ohio, there are also bellwether counties:
+
+* Ottawa County - one miss since 1948 (in 1960), perfect since 1964
+* Wood County - one miss since 1964 (in 1976), perfect since 1980]
+* Lake County - two misses since 1952 (in 1992 and 2012)
+* Stark County - two misses since 1964 (in 1976 and 2004)
+* Sandusky County - three misses since 1952 (in 1960, 1976 and 1992)
+* Tuscarawas County - three misses since 1912 (in 1960, 1968, and 2012)
+
+As a bellwether state, can patterns in Ohio contributions to the presidential election campaigns give us information that would improve predictions of candidate success?
+
+That's what I plan to find out!
+
+## The Datasets
+I tracked down a number of different datasets to help me attempt to explore this question. 
+
+The first one came straight from the Federal Election Commision's data of [2016 Presidential Campaign Finances](https://classic.fec.gov/disclosurep/PDownload.do). 
+
+```{r FEC data, echo=FALSE, message=FALSE, warning=FALSE}
+
+ohio <- read.csv('ohio.csv')
+dim(ohio)
+str(ohio)
+head(ohio)
+sum(duplicated(ohio))
+
+```
+
+It had information on 167,259 contributions made to candidates within the 2016 election cycle across 18 different variables. I did an initial check to confirm that there were no duplicate records and none were found.
+
+The second dataset came from [this site](http://federalgovernmentzipcodes.us/) that connects zipcodes to latitude and longitude values. I wanted this dataset because I was hoping to do some geographic mapping of contributions. The dataset from the FEC had zipcodes, but I needed to connect this to coordinates for latitude and longditude. 
+
+```{r zipcode data, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Load zipcode data
+zipcode <- read.csv('zipcode-database.csv')
+str(zipcode)
+head(zipcode)
+
+```
+
+The dataset did have a lot of interesting information, but rather than getting caught in the weeds, I decided to stick with just incorporating the coordinate data with FEC data. I also double checked that the data was in a usable format. The zipcodes were of integer format and the coordiantes were numerical format. This meant that I didn't have to make any changes to the format - the zipcode information for this dataset and the FEC dataset were the same, so I could use these zipcodes for matching with the FEC zipcodes, and the coordinates were decimal numbers, which is what I would need to use them for plotting.  and the lat/long data as `num` is in a useable form. 
+
+The next dataset I needed was one containing the General Election results for each of the Ohio counties. I created this myself borrowing the data from [Politico](https://www.politico.com/2016-election/results/map/president/ohio/).
+
+```{r election data, echo=FALSE, message=FALSE, warning=FALSE}
+
+election <- read.csv('election-results.csv')
+names(election) <- c("county", "candidate", "percent_vote", "count_vote")
+dim(election)
+str(election)
+head(election)
+
+```
+
+This dataset lists each county (88 of them), the five candidates who ran for president in 2016 for each county, and the number of votes they received in the general election for the county, and what percentage of the votes this equated to. I kept both the count and the percentage information because I wasn't sure what was most useful. Because I built it, I made sure that the candidates' names were in the same format as was found in the FEC dataset to ensure that I could match on candidate names across datasets.
+
+The final dataset allowed me to connect election results information to the FEC data. The FEC data had zipcodes but not counties, and the elections results data only had counties. I used [a site](http://www.corragroup.com/ohio-county-lookup.html) that listed all of the zipcodes associated with each county so that I could use this information to link the FEC data to the election results.
+
+```{r county + zipcode data, echo=FALSE, message=FALSE, warning=FALSE}
+
+countyzip <- read.csv('county-zip.csv')
+dim(countyzip)
+str(countyzip)
+head(countyzip)
+
+```
+
+All of the county names from this site were capitalized, so I will need to change the datasets so that they are all the same type of capitalization. 
+
+# Data Cleaning
+## Ohio Dataset
+
+```{r ohio summary, echo=FALSE, message=FALSE, warning=FALSE}
+
+str(ohio)
+sum(is.na(ohio$contbr_city))
+sum(is.na(ohio$contbr_zip))
+
+```
+
+The FEC dataset was obviously large (167,259 records by 18 columns), so I looked through the columns to determine what they were referencing and decide whether I needed them all.
+
+The first three columns (cmte_id, cand_id, cand_nm) were all factor/categorical variables with the same number of levels (24). Essentially, they were three different ways of capturing the same information - which candidate is receiving the money? I really only needed one of these, so I decided to keep the one that was easiest for me to use, the candidate's name (cand_nm). 
+
+The data also had three location columns - contbr_city, contbr_st, contbr_zip. These referred to the city of the contributor's city, their state and their zipcode. Because the data is from Ohio, the state information was the same for each record. The city information had at least one number in it and so because I wasn't sure of the consistency of the data in this column, I decided to use the zipcode information (contbr_zip) for matching (even though it did have three missing values). However, the names of the cities are much easier to understand when classifying votes to a location, so I decided to keep both.
+
+I did notice that some of the zipcodes did have values longer than 5 (typical length of a US zipcode) and knew that I would need to investigate why this was the case. 
+
+The dataset also provides employment information, about the contributor's employer (contbr_employer) and their occupation(contbr_occupation). While this could be interesting information for another analysis, I was not interested in exploring the characteristics of the contributors to achieve my goal, so these were not needed. 
+
+There were also columns for the amount/value (in dollars) of the contribution (contb_receipt_amt), and the date (contb_receipt_dt). These were definitely important pieces of information that I wanted to keep. The date information was not in a date format (which I would need if I wanted to comparisons over time), so this would need to be changed.
+
+The form type (form_tp) and file number (file_num) didn't seem important for my purposes. 
+
+I wasn't sure what the `election_tp` column was referring to, so I explored it. 
+
+```{r election_tp, echo=FALSE, message=FALSE, warning=FALSE}
+
+table(ohio$election_tp)
+
+```
+
+I discovered that it referred to election type. It used three different codes (G2016, P2016, O2016) to refer to the type of election to which the contribution was made. Some records (393) did not have this information. 
+
+The codes refer to one of three [types of elections](https://votesmart.org/education/elections) towards which the contributions could be made. 
+
+* G2016: General Election - an election to fill public offices (in our case the election of the presidential candidates)
+* P2016: Primary Election - an election prior to the general election in which voters select the candidates who will run on each party's ticket
+* O2016: Open Primary - a subset of a Primary Election where voters to choose on Election Day the party primary for which they wish to vote
+
+I decided that it was important to keep the information for both General and Primary elections, and did not keep any information that didn't have this assigned. I also decided to drop records for contributions to a Open Primary because I felt that the interpretation of this information could be more difficult. (Whereas for the regular General and Primary election codes, the intended party of the support is clear)
+
+There were a number of other columns - receipt_desc, memo_cd, memo_text and tran_id. Of these, the only one that I decided was relevant was transaction ID (tran_id) to help confirm again that there were no duplicate records. 
+
+Based on my exploration, I decided to include the following columns in the final dataset.
+
+* cand_nm
+* contbr_nm
+* contbr_city
+* contbr_zip
+* contb_receipt_amt
+* contb_receipt_dt
+* tran_id
+* election_tp
+
+I then completed all of the subsetting that was needed to select the information I had chosen to include, and changed the data formats that I had identified need modification.
+
+```{r subset and clean data, echo=FALSE, message=FALSE, warning=FALSE}
+# Subset to desired columns and rows
+ohio.2016 <- subset(ohio, select = -c(cmte_id, 
+                                      cand_id, 
+                                      contbr_st,
+                                      contbr_employer, 
+                                      contbr_occupation,
+                                      memo_cd, 
+                                      memo_text,form_tp, 
+                                      file_num, 
+                                      receipt_desc))
+
+etype <- c("G2016", "P2016")
+ohio.2016 <- subset(ohio.2016, (election_tp %in% etype))
+
+# Convert date column to date class
+ohio.2016$contb_receipt_dt <- as.Date(ohio.2016$contb_receipt_dt, "%d-%b-%y")
+
+sum(duplicated(ohio.2016))
+ohio.2016 <- unique(ohio.2016)
+ohio.2016 <- arrange(ohio.2016, contb_receipt_dt, contbr_nm)
+str(ohio.2016)
+
+```
+
+With the removal of the undesired data, an additional test of duplicates revealed 226 duplicated values. These were also removed. This reduced the number of columns to 8 and the number of observations to 166,620.
+
+To investigate zipcodes with more than five digits, I read [this article](http://mentalfloss.com/article/53384/what%E2%80%99s-deal-those-last-4-digits-zip-codes). I discovered that the long digits do include relevant information but because geographical distances were not planned to be used in predictions I decided that I didn't need that level of precision and decided to only use the first five digits. 
+
+```{r remove long zipcodes, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Remove long versions of zipcodes
+cutZip <- ohio.2016$contbr_zip
+cutZip <- as.character(cutZip)
+cutZip <- strtrim(cutZip, 5)
+cutZip <- as.integer(cutZip)
+ohio.2016$contbr_zip <- cutZip
+
+```
+
+I also noticed that there were negative values for some contributions and 
+decided to investigate using Python (as I found it easier to manipulate the data in a Jupyter Notebook). 
+
+Based on the information in `receipt_desc` these values were for refunds or reassignments to a spouse or a different election (e.g. from Primary to 
+General). 
+
+I was originally planning to remove only the refunded transactions and their corresponding initial contributions but discovered that the refunding of transactions was more complicated than I expected. At times there was a straight refund, but for most transactions, multiple steps were involved in the refunding. These processes included reassigning the funds to a diferent election (e.g. from primary to general election, or from general election to a senate race), or reassigning to a spouse. In the majority of cases the value of the refund did not match the initial value and so correctly matching refunds to transactions would have been a challenging task.
+
+I investigated the spread of this data both in terms of the size of the contributions per candidate relative to the full dataset and the distribution of refunded donations among candidates. I decided that there was sufficient similarity in this information to simply remove all records with names of contributors with refunds (or contributions of 0). I used Python to conduct the analysis but removed the unnecessary data with R. 
+
+```{r remove refund contributors, echo=FALSE, message=FALSE, warning=FALSE}
+
+refunds <- ohio.2016[ohio.2016$contb_receipt_amt <= 0,]
+refund.names <- unique(refunds$contbr_nm)
+
+ohio.2016 <- subset(ohio.2016, !(contbr_nm %in% refund.names))
+
+```
+
+This reduced the number of records by approximately 10,000 records (5.8% of the total). 
+
+I also decided to add a column for the [candidates' party alignment](https://classic.fec.gov/disclosurep/pnational.do) (because voting patterns often follow party alignment).
+
+```{r add politcal party, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Add political party column 
+cond <- (ohio.2016$cand_nm == "Clinton, Hillary Rodham" | 
+           ohio.2016$cand_nm == "Sanders, Bernard" |
+           ohio.2016$cand_nm == "O'Malley, Martin Joseph" |
+           ohio.2016$cand_nm == "Lessig, Lawrence" |
+           ohio.2016$cand_nm == "Webb, James Henry Jr.")
+ohio.2016$cand_party <- ifelse(cond, 'Democrat', 'Republican')
+
+cond <- (ohio.2016$cand_nm == "Johnson, Gary" |
+           ohio.2016$cand_nm == "Stein, Jill" |
+           ohio.2016$cand_nm == "McMullin, Evan")
+ohio.2016$cand_party <- ifelse(cond, 'Other', ohio.2016$cand_party)
+ohio.2016$cand_party <- factor(ohio.2016$cand_party)
+
+str(ohio.2016$cand_party)
+
+```
+
+I then added the zipcode information to the main dataset.
+
+```{r add lat long, echo=FALSE, message=FALSE, warning=FALSE}
+
+minZip <- zipcode[,c("Zipcode", "Lat", "Long")]
+
+ohio.2016 <- merge(x = ohio.2016, y = minZip, 
+                   by.x = "contbr_zip", by.y = "Zipcode", 
+                   all.x = T)
+
+sum(is.na(ohio.2016$Lat))/dim(ohio.2016)[1]
+ohio.2016 <- subset(ohio.2016, !(is.na(ohio.2016$Lat)))
+
+```
+
+This left some records with missing coordiante information, but the zipcodes were not clearly identifiable as coming from Ohio and were a very low proportion of the data (Less than 0.1%). I decided to remove them, this left 156,815 contribution records.
+
+I then converted the county names to lower case and the names of all of the columns in the dataset to lower case.
+
+```{r names to lower, echo=FALSE, message=FALSE, warning=FALSE}
+
+names(ohio.2016) <- tolower(names(ohio.2016))
+
+```
+
+I called this cleaned version of the original dataset **ohio.2016**.
+
+## Countyzip Dataset
+
+I converted the county names to lower case and merged with the ohio.2016 dataset.
+
+```{r clean zipcodes, echo=FALSE, message=FALSE, warning=FALSE}
+
+countyzip$County <- tolower(countyzip$County)
+
+ohio.2016 <- merge(x = ohio.2016, 
+                   y = subset(countyzip, select = c(County, ZIP.Code)),
+                   by.x = 'contbr_zip',
+                   by.y = 'ZIP.Code', 
+                   all.x = T)
+
+ohio.2016 <- unique(ohio.2016)
+names(ohio.2016) <- tolower(names(ohio.2016))
+
+```
+
+I then merged the election dataset with the countzip dataset on county (after changing the election county information to lower case as well).
+
+```{r results, echo=FALSE, message=FALSE, warning=FALSE}
+
+election$county <- tolower(election$county)
+
+results <- merge(x = election, 
+                 y = subset(countyzip, select = c(ZIP.Code, County)),
+                 by.x = "county",
+                 by.y = "County",
+                 all.x = T)
+   
+# The merge caused duplications, removed them
+results <- unique(results)
+results <- arrange(results, county, ZIP.Code, desc(count_vote))
+head(results, 10)
+
+```
+
+This resulted in two final datasets, the main dataset ohio.2016 with 156,803 records and the following columns:
+
+* contbr_zip: 5 digit contributor zipcode
+* cand_nm: the name of the candidate they contributed to
+* contbr_nm: the name of the contributor
+* contbr_city: the city of the contributor
+* contb_receipt_amt: the amount of the contribution
+* contb_receipt_date: the date of the contribution
+* tran_id: transaction id, primary to ensure unique transactions
+* election_tp: election type - general election, or primary
+* cand_party: the party of the candicate as democrat, republican or other
+* lat: latitude coordinates for the zipcode
+* long: longditude coordinate for the zipcode
+* county: county of the contributor
+
+The results dataset with 6,655 rows and the following columns:
+
+* county: the reporting county
+* candidate: the names of the five presidential candidates
+* percent_vote: the percentage of the vote that they won for the county
+* count_vote: the count of the votes that they won for the county
+* ZIP.Code: the zipcodes for each county
+
+The the results dataset is arranged in long-format so that there are multiple entries for each zipcode, that provide the county and candidate information. If I had merged this information with the ohio.2016 dataset it would have duplicated the individual contributions to match with the zipcodes. I didn't want this to occur so I kept them separate for the time being.
+
+# Univariate Exploration
+## Candidates
+
+```{r candidates, echo=FALSE, message=FALSE, warning=FALSE}
+
+table(ohio.2016$cand_nm)
+
+ggplot(aes(x = cand_nm), data = ohio.2016) +
+  geom_histogram(stat = "count") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+Eleven candidates received over 100 contributions from Ohio voters. These were
+
+* Jeb Bush 
+* Ben Carson 
+* Hillary Clinton
+* Ted Cruz
+* Gary Johnson
+* John Kasich
+* Rand Paul
+* Marco Rubio
+* Bernie Sanders
+* Donald Trump. 
+
+Hillary Clinton, Bernie Sanders, and then Donald Trump received the largest number of contributions. 
+
+This result was suprising to me. As a state, Ohio supported Trump as the presidential candidate, but based on the number of contributions, there is much more support for Clinton. I wondered if looking at the value of the contributions per candidate would provide further insight. I also wondered how contributions over time, and the differences between the primary and general elections would also modify this apparent support for Clinton. 
+
+## Parties
+The spread of contributions across parties was as follows.
+
+```{r parties summ, echo=FALSE, message=FALSE, warning=FALSE}
+
+table(ohio.2016$cand_party)
+
+```
+
+```{r parties plot, echo=FALSE, message=FALSE, warning=FALSE, fig.width=3.5, fig.height=3.5}
+
+ggplot(aes(x = cand_party), data = ohio.2016) +
+         geom_histogram(stat = "count")
+
+```
+
+There were a lot more republican candidates than democratic candidates and so I wondered if the surprising number of contributions for Clinton would be balanced out at the party level. 
+
+As you can see, this was not the case. The largest number of contributions were made to democratic candidates (99,494) compared to just over half as many (56,888) contributions made to republican candidates. You can see that almost no contributions were made to candidates not from one of the major two parties. 
+
+So even comparing Democratic and Rebublican candidates combined, the large number of Republican candidates didn't mean overall there were more contributions for Republican candidates.
+
+## Contributions per Election Type
+
+```{r election type summ, echo=FALSE, message=FALSE, warning=FALSE}
+
+table(ohio.2016$election_tp)
+
+```
+
+```{r election type plot, echo=FALSE, message=FALSE, warning=FALSE, fig.width=3.5, fig.height=3.5}
+
+ggplot(aes(x = election_tp), data = ohio.2016) +
+         geom_histogram(stat = "count")
+
+```
+
+I figured that there could be differences in the number of contributions made towards each election type (general and primary). I hadn't expected to find so many more contributions for the primary election (101,178) than the general election (55,625).
+
+## Contributions per Contributor
+
+```{r contributions, echo=FALSE, message=FALSE, warning=FALSE}
+
+contrCount <- ohio.2016 %>% count(contbr_nm) 
+contrCount <- arrange(contrCount, desc(n))
+
+length(unique(ohio.2016$contbr_nm))
+
+ggplot(aes(x = contbr_nm, y = n), data = contrCount[1:10,]) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+Again, contributor characteristics were not something that I was intending to include in my model for predicting election results, but I thought it might be a good idea to check the information, just in case something significant was identified. 
+
+There were 43,683 unique contributors in the ohio.2016 dataset. The contributors who made the largest number of contributions each made more than 100 contributions. One individual made over 150 contributions.
+
+```{r contribution summary, echo=FALSE, message=FALSE, warning=FALSE}
+
+summary(contrCount$n)
+
+ggplot(aes(x = n), data = contrCount) +
+  geom_histogram(binwidth = 1, color = 'white') +
+  scale_x_continuous(limits = c(0, quantile(contrCount$n, 0.95)),
+                     breaks = seq(0, quantile(contrCount$n, 0.95), 1))
+
+```
+
+The contribution numbers of the contributors with the highest numbers of individual contributions was very different from how contributions were made in the general population.
+
+I limited the information to show how the bottom 95% of contributors (in terms of number of contributions) made their contributions.
+
+The majority of people made 3 contributions or less (more than half make just one), and most contributors made 13 contributions or less. 
+
+While this is interesting, number of contributions per contributor is not may main focus, but something to keep an eye on in case it happens to be 
+relevant later on.
+
+## Contributions per City
+
+```{r city count, echo=FALSE, message=FALSE, warning=FALSE}
+
+length(unique(ohio.2016$contbr_city))
+
+```
+
+```{r city plot, echo=FALSE, message=FALSE, warning=FALSE, fig.width=5, fig.height=3.5}
+
+cityCount <- ohio.2016 %>% count(contbr_city)
+cityCount <- arrange(cityCount, desc(n))
+
+ggplot(aes(x = contbr_city, y = n), data = cityCount[1:6,]) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+One of the realities in voting is that it doesn't just matter that a vote was cast, it can matter where it was cast. I reasoned that this was also possibly the case for contributions. I wanted to have a look at where contributions were being made by 
+
+Again, I split the investigation into the highest contributing cities and then examined the contributions patterns for the majority of cities. 
+
+Contributions came from 1,252 cities across Ohio. The top five cities for contributions to presidential candidates were Columbus, Cincinnati, Cleveland, Dayton, Akron, and Toledo. Each of these cities had over 2,500 contributions from their inhabitants.
+
+With my continuing investigations, I became more interested in being able to examine the interactions between location, the number and size of contributions, and how this related to party support. 
+
+```{r city summary, echo=FALSE, message=FALSE, warning=FALSE}
+
+summary(cityCount$n)
+
+ggplot(aes(x = n), data = cityCount) +
+  geom_histogram(binwidth = 1, color = 'white') +
+  scale_x_continuous(limits = c(0, quantile(cityCount$n, 0.75)),
+                     breaks = seq(0, quantile(cityCount$n, 0.75), 5))
+
+```
+
+When looking at the cities with the lowest 75% of contributions, there were many cities from which only one contribution was made. 25% of the cities had up to three contributions. All of the cities in the lowest 75% had 70 contributions or less. However, as we saw above, the maximum number of contributions for a city ranged up to 16,309 for Columbus. 
+
+This information highlighted the importance of location. If information is just looked at by state averages, the impacts of the contributions might be outweighed by what is found in cities with more contributions. 
+
+I realized that this might also help explain some of the differences seen in the numbers of contributions. Perhaps contributions for Clinton and/or Democractic candidates were more likely to occur in cities. 
+
+To see the spread of the contributions across Ohio, I plotted the contributions by their latitude and longitude coordinates that had come from the associated zipcode. 
+
+```{r map exploration, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(aes(x=long, y=lat), data=ohio.2016) +
+  geom_point() +
+  scale_x_continuous(breaks = seq(-90, -70, 5)) +
+  scale_y_continuous(breaks = seq(35, 45, 5)) +
+  coord_fixed(1.3)
+
+```
+
+Even though all contributors had a state name of Ohio in the original FEC data, there were a number of coordinates that were well out of the Ohio borders. Either the zipcode information was wrong, or, some Ohio contributions were made out of state and this was the zipcode that was recorded. 
+
+I decided to exclude any information that didn't fall within the Ohio borders. The limits for this were between -85 and -80 for the x-axis and 38 to 42 for the y-axis. I also looked up the central coordinates for the cities that were identified as having the top 6 highest contribution numbers to add to the map.
+
+Finally, I added the state and county boundaries using the `maps` library.
+
+```{r map refine, echo=FALSE, message=FALSE, warning=FALSE}
+
+city_names <- c("Columbus", "Cincinnati", "Cleveland", "Dayton", "Akron",
+"Toledo")
+city_lat <- c(39.9612, 39.1031, 41.4993, 39.7589, 41.0814, 41.6528)
+city_long <- c(-82.9988, -84.5120, -81.6944, -84.1916, -81.5190, -83.5379)
+cities <- data.frame(city_names, city_lat, city_long)
+
+ohio.map <- map_data("county", "Ohio")
+
+ggplot() +
+  geom_polygon(data = ohio.map, 
+               aes(x = long, y = lat, group = group),
+               color = "#A9A9A9", fill = "#F8F8F8") +
+  geom_point(data = ohio.2016, 
+             aes(x = long, y = lat), 
+             alpha = 0.02, position = "jitter", size = 1) +
+  geom_point(data = cities, 
+             aes(x = city_long, y = city_lat), 
+             color = '#ff8533', size = 3) +
+  geom_text(data = cities, 
+            aes(x = city_long, y = city_lat,
+                label = city_names, color = I('#b34700')), 
+            size = 5, hjust=-0.06, vjust=0) +
+  scale_x_continuous(limits = c(-85, -80), breaks = seq(-85, -80, 1)) +
+  scale_y_continuous(limits = c(38, 42), breaks = seq(38, 42, 1)) +
+  coord_fixed(1.3) +
+  labs(x="", y="") +
+  ggtitle("Contribution Numbers across the State") +
+  theme_void()
+
+```
+
+The plot showed a concentration of votes around the cities (with some spread, possibly because residential zipcodes are often further out from the city center). This mirrored what we saw when examining in the dividual cities, including some areas where very few contributions were made.
+
+## Contributions per County
+
+```{r county, echo=FALSE, message=FALSE, warning=FALSE}
+
+countyCount <- subset(ohio.2016, !is.na(county)) %>% count(county)
+countyCount <- arrange(countyCount, desc(n))
+
+head(countyCount, 10)
+
+ggplot(aes(x = county, y = n), data = countyCount[1:10,]) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+I also wanted to look at the contributions per county because this is often done for vote counts. 
+
+When looking at vote counts, it is not the city that is critical, but the electoral area. While electoral areas do not always align with county borders, it is common to report results occording to county. One of the reasons for this is that from decade to decade the boundaries for the electoral areas can change. Comparing by counties allows for some consistency across the years. 
+
+The 10 counties with the most contributions were Cuyahoga (Cleveland), 
+Franklin (Columbus), Hamilton (Cincinnati), Summit (Akron), Butler (Cincinnati), Warren (Cincinnati), Lorain (Cleveland), Delaware(Columbus), Stark(Akron), and Clermont(Cincinnati). Each of these counties is associated with one of the major cities that was identified above. 
+
+To allow me to plot the spread of contributions across counties, I used [this](https://stackoverflow.com/questions/17723822/administrative-regions-map-of-a-country-with-ggmap-and-ggplot2) resource. 
+
+```{r county summ, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Format countyCount to merge with ohio.map
+names(countyCount) <- c("subregion", "contb_n")
+ohio.map <- merge(ohio.map, countyCount, by = 'subregion')
+
+summary(ohio.map$contb_n)
+
+```
+
+```{r county map, echo=FALSE, message=FALSE, warning=FALSE, fig.height=3.5, fig.width=5, fig.align='center'}
+
+ggplot() +
+  geom_polygon(data = ohio.map, 
+               aes(x = long, y = lat, group = group, 
+                   fill = cut_number(contb_n, 8)), color = '#c1e4f0') +
+  scale_fill_brewer('Number of Contributions', palette = "Greys") +
+  geom_point(data = cities, aes(x = city_long, y = city_lat), 
+             color = '#ff8533', size = 3) +
+  geom_text(data = cities, 
+            aes(x = city_long, y = city_lat,
+                label = city_names, color = I('#e6bf99')), 
+            size = 5, hjust=-0.06, vjust=0) +
+  coord_fixed(1.3) +
+  labs(x="", y="") +
+  theme_void()
+
+```
+
+Again, mapping the contribution by county confirmed what had been seen above - that counties with the highest numbers of contributions are associated with the cities that had the highest contribution numbers. 
+
+We can also see the great differences between county contribution numbers across the state. Counties with the lowest contribution numbers have 167 contributions or less, while the counties with the largest numbers of contributions have at least 2,750 contributions.
+
+## Contribution Values
+
+```{r amounts, echo=FALSE, message=FALSE, warning=FALSE}
+
+summary(ohio.2016$contb_receipt_amt)
+
+ggplot(aes(x = contb_receipt_amt), data = ohio.2016) +
+  geom_histogram(binwidth = 5, color = 'white') +
+  scale_x_continuous(limits = c(0, quantile(ohio.2016$contb_receipt_amt, 0.95)),
+                     breaks = seq(0, 
+                                  quantile(ohio.2016$contb_receipt_amt, 0.95),
+                                  50))
+
+```
+
+There was a large spread in the dollar values of the contributions made, ranging from \$0.08 to \$29,1000. 
+
+To understand what was happening for the majority of the contributions I examined the bottom 95% of contribution values.
+
+As we can see, 95% of the contributions were less than \$400. The dollar amounts are also more common at the \$25 and \$50 intervals.
+
+## Contribution Dates
+
+I wanted to be able to potentially classify dates by weeks or months so I added two columns to do this. I found that plotting the number of contributions per week provided a balance between too much variability (which can make interpretation difficult) and too much summarization (which can gloss over key details) when plotting over time. 
+
+```{r dates, echo=FALSE, message=FALSE, warning=FALSE}
+
+ohio.2016$month <- as.Date(cut(ohio.2016$contb_receipt_dt, breaks = "month"))
+ohio.2016$week <- as.Date(cut(ohio.2016$contb_receipt_dt,
+                              breaks = "week",
+                              start.on.monday = F))
+
+ggplot(aes(x = week), data = ohio.2016) +
+  geom_freqpoly(binwidth = 7) +
+  scale_x_date(date_breaks = "2 months",
+               date_labels = "%b %y") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+The plotting showed some substantial fluctuations in how many contributions were received over time.
+
+While contributions started from July 2014, they started to increase from around April 2015 (approximately a year and a half before the election) and continued 
+up until December 2017, but dropped sharply with the election on November 8, 2017. There are three spikes of contributions, occuring from around February 2016 to April 2016, then part way through June 2016 with a big drop midway through August 2016, and picking up from this point until the drop with election day. 
+
+I noticed that there were contributions after the election day. While they may not contribute substantially to understanding the data, I thought it could be interesting to know why they exist.
+
+The number of contributions over time continued to make me interested into contribution values, election types and candidates and parties to see if any patterns emerged that might explain the eventual support of Trump.
+
+## Results Dataset
+
+I examined the overall vote spread between candidates.
+
+```{r results summary, echo=FALSE, message=FALSE, warning=FALSE}
+
+by(election$count_vote, election$candidate, sum)
+
+```
+
+```{r results plot, echo=FALSE, message=FALSE, warning=FALSE, fig.height=3.5, fig.width=4}
+
+ggplot(aes(x = candidate, y = count_vote), data = election) +
+  geom_bar(stat = "sum") +
+  theme(axis.text.x = element_text(angle=60, hjust=1),
+        legend.position = "none")
+
+```
+
+While voting for a candidate not from the major two parties continues to be a point of discussion for US politics, in the case of Ohio, if all voters who 
+voted for non-major party candidates had voted for Clinton, it would not have been sufficient for her to surpass Trump's vote count.
+
+## Summary of Findings from Univariate Analysis
+
+### Primary investigation focus
+
+While there are many interesting paths that could be followed with the above data, the above information solidified my interest in the original goal - to use information about contributions values to predict the final presidential election results. 
+
+### Other key data features
+
+From my explorations, other areas that appeared to be of value in achieving this goal were the party of the candidate, the type of election to which a contributor made their contribution, where the contribution was made, and when the contribution was made.
+
+# Bivariate Exploration
+
+While I could have started my bivariate analysis focusing on the main relationship I was looking to observe, I felt that it was important to understand the factors that may contribute to this relationship first. With so many additional variables, it seemed easy to be able to miss a key element if I didn't properly understand these 'other' factors first.
+
+## Pairwise plotting
+
+When trying to understand the potential relationships in your data, it can be helpful to do some 'en masse' plotting. A number of different variables are all compared at the same time. 
+
+From the key investigative variables outlined above, I looked at candidate party, the type of election, the time of contribution and the amount of contribution. I excluded the name of the candidate and the geographic information for the contributor because their inclusion would have created too many comparisons and likely made interpretation of the results incredibly difficult.
+
+```{r pairwise, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=8}
+
+# Remove cand_nm, contbr_nm, contbr_city, contbr_zip, tran_id, lat, long, county for pairwise plotting
+
+ggpairs(subset(ohio.2016, 
+               select = c(contb_receipt_amt, 
+                          contb_receipt_dt,
+                          election_tp, cand_party)),
+        lower = list(continuous = wrap("points", shape = I('.'))),
+        upper = list(combo = wrap("box", outlier.shape = I('.'))))
+
+```
+
+Here's what can be seen in the plots.
+
+### Contribution Values
+- The plots in this column highlight the highly skewed data for contribution amounts with most of the plots showing a single bar. 
+- The comparison to date shows an interesting picture of how contribution sizes fluctuate over time, and also the common standard amounts of contribution, with \$5,000 being the typical max, but regular contributions being up to approximately \$2,500.
+
+### Contribution Date
+- The slightly negative correlation with contribution date and amount suggests that there may be some value in exploring contribution amounts over time, as contribution amounts decrease over time.
+- There is essentially no overlap in contribution dates for general election and primary election contributions
+- There also some difference in the times of contributions for the candidates of democratic and republican parties with contributions for democrats found primarily in 2016, while contributions for republicans are spread more throughout the period, with a few peaks
+- It seems the only contributions for candidates from non-major parties happened during the general election
+
+### Election Type
+- The inter-quartile range (IQR - the middle 50% - shown by a box) for the two election types seems consistent but there is more variability in the outliers for the primary election contributions
+- The boxplots for date and election type show that there is overlap in the dates for the campaign types but that the key donation periods are very distinct.
+- The contributions counts for candidate party compared to election type show that while there were relatively similar numbers of contributions made for republican and democratic candidates (with slightly more for democratic), there were substantially more contributions made for the democratic candidate than the republican candidate in for the general election. 
+
+### Candidate Party
+- The amount of the contributions for candidates from each party type are quite similar (with what looks like a slightly higher IQR for "Other" candidates), but there is much more variability in the outlying contributions for republican candidates.
+- Again, we see the potential impact of contribution time, contributions to democrats were typically made later than for republicans, and latest for the candidate from a non-major party (in line with these only occurring for the general election)
+- And we see the confirmation of what has been previously surmised, similar contribution rates in the primary elections for democrats and republicans 
+(though more for the democrats), but a comparatively much larger difference in contributions rates during the general election, again, more weighted to the democratic candidate.
+
+## Contribution Target
+
+From the pairwise comparisons I decided to first investigate the details of the contributions towards their target, this meant looking at both the candidate the received the contribution and their party alignment. 
+
+### Number of Contributions Received per Candidate by Party
+
+The first thing I did was take the black and white count plot from above and add color to it. 
+
+```{r contributions per candiate by party, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(aes(x = cand_nm, fill = cand_party), data = ohio.2016) +
+  geom_histogram(stat = "count") +
+  scale_fill_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Alignment')) +
+  ggtitle("Number of Contributions Per Candidate") +
+  labs(y = "Number of Contributions", x = "Candidate Name") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+While number of contributions per candidate or party likely does not tell the full story in the data, I wanted to have the visual comparison to inform other investigations between variables as I moved forward. 
+
+The color-coding highlighted the partisan nature of election contributions with the vast majority of contributions made towards a candidate from one of the two major political parties. 
+
+Only one candidate that was not from a major party received notable 
+contributions from Ohioans - Gary Johnson.
+
+### Value of Contributions per Candidate
+
+The next logical step seemed to be to compare the number of contributions per candidate to the total value of contributions per candidate. For these plots, I did add in the additional element of color for party, even though it did technically add a third variable (and cause it to be not truly bivariate), but I felt that the additional color made for easier matching of the candidates through the plots and therefore easier comparisons. 
+
+```{r total contribution values per candidate, echo=FALSE, message=FALSE, warning=FALSE, fig.width=9}
+
+#by(ohio.2016$contb_receipt_amt, ohio.2016$cand_nm, sum)
+
+ggplot(data = ohio.2016, 
+       aes(x = cand_nm, y = contb_receipt_amt, fill = cand_party)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Alignment')) +
+  ggtitle("Total Value of Contributions Per Candidate") +
+  labs(y = "Value of Contributions($)", x = "Candidate Name") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+With this plot you can immediately see that value of the contributions per candidate changes the picture of candidate support. 
+
+While Clinton still has the highest value of donations, Kasich and Trump now dramatically surpass Sanders in the value of contributions received. 
+
+The plot also gives us some insight into the differences in the sizes of the contributions received. While Sanders received the second highest number of contributions, the total value of those contributions was much lower, suggesting that the size of each of the contributions he received was much smaller than some of the other canidates. 
+
+Conversely, the average size of the contributions for Kasich and Trump appears higher than for either of Trump and Sanders. 
+
+That being said, Trump still only receives the third highest level of support for value of contributions from Ohioans, so more work needs to be done to fully understand his final support as presidential candiate. 
+
+```{r value per candidate, echo=FALSE, message=FALSE, warning=FALSE, fig.width=9}
+
+ggplot(aes(x = cand_nm, y = contb_receipt_amt), data = ohio.2016) +
+  geom_boxplot(outlier.size = 0.75) +
+  ggtitle("Distribution of the Value of Contributions Per Candidate") +
+  labs(y = "Value of Contributions ($)", x = "Candidate Name") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+The use of a boxplot begins to confirm some of what I had described above in the comparison of contribution numbers to total value. 
+
+We see that Kasich has a number of very large contributions, much higher than any other candidate. His largest single contribution received was close to \$30,000. I discovered that Kasich is the Governor of Ohio, so it does make sense that he would be able to attract very large donations within Ohio.
+
+For all other candidates their contributions maxed out at a single individual contribution of under \$6,000.
+
+To gain a better understanding of what was happening for the majority of the candidates, I adjusted the scale to view only contributions under $5,500. Again, to easily find and match candidates I included color for their party alignment.
+
+```{r value per candidate reduced, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=6}
+
+#by(ohio.2016$contb_receipt_amt, ohio.2016$cand_nm, summary)
+
+ggplot(data = ohio.2016,
+       aes(x = cand_nm, y = contb_receipt_amt, fill = cand_party)) +
+  geom_boxplot(outlier.size = 1, outlier.alpha = 0.2) +
+  scale_fill_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Alignment')) +
+  scale_y_continuous(limits = c(0, 5500), breaks = c(0, 2000, 4000, 5500)) + 
+  ggtitle("Distribution of the Value of Contributions Per Candidate") +
+  labs(y = "Value of Contributions ($)", x = "Candidate Name") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+We find that only four candidates received contributions over $5,000 - Clinton, Cruz, Kasich and Trump. After these outliers, there appears to be a threshold at \$2,700. Excluding the outliers, ontributions for all candidates range up to this point. 
+
+We also see the depiction of the difference in the typical size of contributions for candidates. Both Clinton and Sanders have 75% of the contributions they received below \$60. We can also see that while Kasich received a comparatively small number of contributions (as noted above), the 75% range of his contributions was much higher than any other candidate at \$2,000. 
+
+The use of the boxplot also highlighted candidates like O'Malley and Pataki, who didn't have sufficient numbers of contributions to register as a colored line on the bar chart for number of contributions per candidate but have the highest medians for value of contribution.
+
+### Value of Contributions by Candidate Alignment
+
+I also wanted to collapse these contributions to make comparisons at the aggrevate level for political affiliation. 
+
+```{r total contribution values per party, echo=FALSE, message=FALSE, warning=FALSE, fig.height=3.5, fig.width=3.5}
+
+ggplot(data = ohio.2016, 
+       aes(x = cand_party, y = contb_receipt_amt, fill = cand_party)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = F) +
+  scale_y_continuous(labels = comma) +
+  ggtitle("Total Value of Contributions \nPer Alignment") +
+  labs(y = "Total Value of Contributions ($)", x = "Alignment")
+
+```
+
+This was the first time that I could clearly see evidence of the final support of Trump for president within Ohio. Trump became the Republican nominee for president, and, if voters who contributed to Republican candidates are generally inclined to vote Republican, we find possible evidence of the reason for support within Ohio for Trump's candidacy.
+
+Again, with the goal of fully understanding the patterns in the data, I also wanted to look at the spread of contributions across the political alignments. I scaled down the plots to \$1,000 to get a clear picture of the spread under 75%.
+
+```{r value by party, echo=FALSE, message=FALSE, warning=FALSE, fig.height=3.5, fig.width=3.5}
+
+#by(ohio.2016$contb_receipt_amt, ohio.2016$cand_party, summary)
+
+ggplot(aes(x = cand_party, y = contb_receipt_amt, color = cand_party), 
+       data = ohio.2016) +
+  geom_boxplot(outlier.size = 1, outlier.alpha = 0.1) +
+  scale_y_continuous(limits = c(0, 1000)) +
+  scale_color_manual(values=c("#4d79ff", "#66cc00", "#ff6666"),
+                     guide = "none") +
+  labs(y = "Value of Contributions ($)", x = "Candidate Alignment") +
+  ggtitle("Distributions of Contributions \nby Political Alignment")
+
+```
+
+Again, we find further confirmation of what we have been discussing. The typical range of contributions for Democratic candidates is lower than for Republican candidates. The median contribution for Democratic candiates is \$25 which is lower than the \$50 median contribution for Republican candidates. 
+
+Candidates who are not from the major political parties have a higher range of contribution values than those from the major parties, but some of this may be due to the impact of sample size as there are much fewer contributions for these candidates than for the major party candidates.
+
+## Contribution Timing
+
+After getting a strong handle on how contributions were made to candidates at an individual and political alignment level, I moved to understanding how contributions played out over the course of time. 
+
+### Value of Contributions over Time
+
+The first port of call was obviously getting the overall picture of how the the value of contributions changed over time. 
+
+I used the same summarization technique as I had used for number of contributions and plotted the sum of all contributions per week over the course of the election cycle. 
+
+```{r value over time, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(aes(x = week, y = contb_receipt_amt), data = ohio.2016) +
+  geom_line(stat = 'summary', fun.y = sum) +
+  scale_x_date(date_breaks = "2 months",
+               date_labels = "%b %y") +
+  scale_y_continuous(labels = comma) +
+  labs(y = "Value of Contributions ($)", x = "") +
+  ggtitle("Contribution Value per Week") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+The peak patterns for the contribution values were similar to those seen when looking at contribution numbers, with both containing three similar peaks from the right side of the chart. However, the addition of contribution value saw an additional peak between July 2015 to September 2015, suggesting a smaller number of donations with large values during this period.
+
+Again, for the purposes of gaining a full understanding of the data, I decided to also look at the mean and median contribution values per week.
+
+```{r central value over time, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(data = ohio.2016, 
+       aes(x = week, y = contb_receipt_amt)) +
+  geom_line(stat = 'summary', fun.y = mean, aes(color = "Mean")) +
+  geom_line(stat = 'summary', fun.y = median, aes(color = "Median")) +
+  scale_color_manual("",
+                     values = c("Mean" = '#ff9933', "Median" ='#b366ff')) +
+  scale_x_date(date_breaks = "2 months",
+               date_labels = "%b %y") +
+  labs(y = "Value of Contributions ($)", x = "") +
+  ggtitle("Mean and Median Contribution Values over Time") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+These plots tell us that while not many contributions were made early on in the campaign process, they were typically larger than the value of contributions made later in the campaign. Outside of noise early on in the campaign, there are three periods where it appears a smaller number of large contributions were made, dragging up the mean while leaving the median relatively stable.Both the mean and the median also kicked up right at the end of the campaign period.
+
+### Contribution Dates by Election Type
+
+The election course occurs such that first there are primary elections where voters select the presidential candidate for their party and then the nation votes on the president in the general election. 
+
+I felt that it was important to see how the type of election to which a contribution was made interacted with the time course of contributions. To keep the comparison to just two variables at a time, I went back to looking at the number of contributions and compared these to election type of the contribution.
+
+```{r dates by election, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(aes(x = week, color = election_tp), data = ohio.2016) +
+  geom_freqpoly(binwidth = 7) +
+  scale_x_date(date_breaks = "2 months",
+               date_labels = "%b %y") +
+  scale_color_manual(values = c('#2985a3', '#33cccc')) +
+  labs(y = "Number of Contributions", x = "") +
+  ggtitle("Number of Contributions over Time by Election Type") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+We can see a clear distinction between the contribution period for the primary election (from March 2015 to July 2016) and the general election (July 2016 to November 2016). While there are some small contributions made to the genereal election prior to July 2016, it makes sense that there are very few because at this time it is uncertain who will be running for president for each party.
+
+### Contribution Dates by Candidate Alignment
+
+I also thought there could be some significance in how political alignment impacted contributions over time. Again, I kept this comparison to the number of contributions over time.
+
+```{r dates by party, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(aes(x = week, color = cand_party), data = ohio.2016) +
+  geom_freqpoly(binwidth = 7) +
+  scale_x_date(date_breaks = "2 months",
+               date_labels = "%b %y") +
+  scale_color_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Party')) +
+  labs(y = "Number of Contributions", x = "") +
+  ggtitle("Number of Contributions over Time by Candidate Alignment") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+Each of the major parties had two peak times in terms of contributions. For the Republican candidates it was between January 2016 and April 2016 and then another peak during mid-June to early August 2016. For the Democratic candidates the two peaks are from January 2016 to June 2016, longer than the first Republican peak. The second peak for the Democratic candidates was later than the second Republican peak, from late August up until the election in November 2016. From when contributions for both parties started peaking, numbers of contributions per week for Democratic candidates typically stayed above 1,000 but contributions for Republican candidates sometimes dropped to close to 0 contributions per week.
+
+## Contribution Geography
+
+From looking at the time course of contributions, I moved to looking at where contributions were made across the state.
+
+### Contribution Value across the State
+
+I first wanted to plot the size of the contribution values across the state. 
+
+```{r value across state, echo=FALSE, message=FALSE, warning=FALSE, fig.height=3.5, fig.width=5, fig.align='center'}
+
+ggplot() +
+  geom_polygon(data = ohio.map, 
+               aes(x = long, y = lat, group = group),
+               color = "#A9A9A9", fill = "#F8F8F8") +
+  geom_point(data = ohio.2016, 
+             aes(x = long, y = lat, size = contb_receipt_amt), 
+             alpha = 0.02, position = "jitter") +
+  geom_point(data = cities, 
+             aes(x = city_long, y = city_lat), 
+             color = '#ff8533', size = 3) +
+  geom_text(data = cities, 
+            aes(x = city_long, y = city_lat,
+                label = city_names, color = I('#b34700')), 
+            size = 5, hjust=-0.06, vjust=0) +
+  scale_x_continuous(limits = c(-85, -80), breaks = seq(-85, -80, 1)) +
+  scale_y_continuous(limits = c(38, 42), breaks = seq(38, 42, 1)) +
+  coord_fixed(1.3) +
+  scale_size_continuous(range = c(0.25, 20), 
+                        guide = guide_legend(title = 'Contribution Value',
+                                             override.aes = list(alpha = 1))) +
+  labs(x="", y="") +
+  ggtitle("Value of Contributions across the State") +
+  theme_void()
+
+```
+
+With the introductions of the size component to this map we can see that while there is a concentration of larger donations found in the areas of the major cities, there are certainly some key areas outside of the major city areas where higher contributions are found. 
+
+### Contribution Values by County
+
+To better compare the differences in contribution value between major centres and the rest of the state, I plotted the contribution value by county.
+
+```{r value by county, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Group contributions by county
+countyValue <- subset(ohio.2016, !is.na(county)) %>%
+  group_by(county) %>%
+  summarise(contb_total = sum(contb_receipt_amt), 
+            contb_mean = mean(contb_receipt_amt),
+            contb_median = median(contb_receipt_amt))
+
+names(countyValue) <- c("subregion", 
+                        "contb_total", 
+                        "contb_mean", 
+                        "contb_median")
+
+# Merge with map data
+ohio.map <- merge(x = ohio.map, y = countyValue, by = 'subregion')
+
+#summary(ohio.map$contb_total)
+
+```
+
+
+```{r value by county map, echo=FALSE, message=FALSE, warning=FALSE, fig.height=3.5, fig.width=5, fig.align='center'}
+
+ggplot() +
+  geom_polygon(data = ohio.map, 
+               aes(x = long, y = lat, group = group, 
+                   fill = cut_number(contb_total, 8)), color = 'grey') +
+  scale_fill_brewer('Contribution Value', 
+                    palette = "BuGn",
+                    labels = c("<= $1,240",
+                               "<= $1,930",
+                               "<= $2,590",
+                               "<= $3,700",
+                               "<= $5,810",
+                               "<= $11,700",
+                               "<= $24,000",
+                               "<= $281,000")) +
+  geom_point(data = cities, 
+             aes(x = city_long, y = city_lat), 
+             color = '#d7995b', size = 3) +
+  geom_text(data = cities, 
+            aes(x = city_long, y = city_lat,
+                label = city_names, color = I('#803300')), 
+            size = 5, hjust=-0.06, vjust=0) +
+  coord_fixed(1.3) +
+  labs(x="", y="") +
+  ggtitle("Total Contribution Value per County") +
+  theme_void()
+
+```
+
+The concentrations of higher values of contributions to major city centres make sense given that they have more inhabitants, but as we had seen in the contribution plot, there are a number of counties outside of the major cities where contribution values are reasonably high. 
+
+```{r central value by county, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+summary(ohio.map$contb_mean)
+summary(ohio.map$contb_median)
+
+p1 <- ggplot() +
+  geom_polygon(data = ohio.map, 
+               aes(x = long, y = lat, group = group, 
+                   fill = cut_number(contb_mean, 8)), 
+               color = 'grey') +
+  scale_fill_brewer('Contribution Value', 
+                    palette = "Oranges",
+                    labels = c("<= $60",
+                               "<= $70",
+                               "<= $80",
+                               "<= $89",
+                               "<= $102",
+                               "<= $125",
+                               "<= $153",
+                               "<= $262")) +
+  geom_point(data = cities, 
+             aes(x = city_long, y = city_lat), 
+             color = '#808080', size = 3) +
+  geom_text(data = cities, 
+            aes(x = city_long, y = city_lat,
+                label = city_names, color = I('#303030')), 
+            size = 5, hjust=-0.06, vjust=0) +
+  coord_fixed(1.3) +
+  labs(x="", y="") +
+  ggtitle("Mean") +
+  theme_void()
+
+p2 <- ggplot() +
+  geom_polygon(data = ohio.map, 
+               aes(x = long, y = lat, group = group, 
+                   fill = cut_number(contb_median, 5)), 
+               color = 'grey') +
+  scale_fill_brewer('Contribution Value', 
+                    palette = "Purples",
+                    labels = c("<= $27",
+                               "<= $28",
+                               "<= $35",
+                               "<= $40",
+                               "<= $80")) +
+  geom_point(data = cities, 
+             aes(x = city_long, y = city_lat), 
+             color = '#808080', size = 3) +
+  geom_text(data = cities, 
+            aes(x = city_long, y = city_lat,
+                label = city_names, color = I('#303030')), 
+            size = 5, hjust=-0.06, vjust=0) +
+  coord_fixed(1.3) +
+  labs(x="", y="") +
+  ggtitle("Median") +
+  theme_void()
+
+```
+
+
+```{r central value by county plot, fig.height = 3.5, fig.width = 10.5, echo=FALSE, message=FALSE, warning=FALSE}
+
+grid.arrange(p1, p2, ncol = 2)
+
+```
+
+As was identified when looking at the individual donations, we can see that while there are some concentrations of larger donations in city areas, there are some counties outside of the major city areas that have higher average contributions than found in the major cities - Cleveland and Akron are the only major cities that have associated counties with the highest contribution averages. 
+
+Mean contributions per county ranged from \$33 per contribution to \$262 per contribution.
+
+When considering the median, the range is much smaller than for the mean, ranging from \$23 per contribution to \$80 per contribution.
+
+We can see that the highest median contributions move even further from the city centres, suggesting that the higher means that were observed are pulled up by a small amount of large contributions. 
+
+Median contributions for the counties directly associated with the city centres for Cleveland and Cincinnati are the highest for the city centres but fall in the middle bucket for median contributions, ranging from \$28 to $35 per contribution. Toledo falls in the next bucket ranging from \$27 to \$28 per contribution and Columbus and Akron's immediate county's median contribution values are at the lowest end of the scale, ranging from \$23 to \$27.
+
+The progression of these plots suggestst that while cities will always have a larger capture of contributions than smaller areas, there are many of smaller areas in the state where the typical individual contribution is quite a bit higher than in the major city areas, sometime by 2 to 3 times as much.
+
+## Election Results Compared to Contributions
+
+With all of the comparisons between the 'other' variables completed, I moved on to the primary focus of my investigation - how do contributions impact election results?
+
+### Vote Counts v. Contribution Values for Presidential Candidates
+
+I wanted to be able to compare vote counts for each candidate to the value of contributions that they received. Because vote counts were per county, I totaled the contributions received by each presidential candidate per county and then plotted each of the pairs of vote count and contribution value. 
+
+```{r votes v contb, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Group ohio.2016 by candidates and county
+contb.by_cand_county <- subset(ohio.2016, !is.na(county)) %>%
+  group_by(county, cand_nm) %>%
+  summarise(contb_total = sum(contb_receipt_amt),
+            contb_mean = mean(contb_receipt_amt),
+            contb_median = median(contb_receipt_amt),
+            contb_n = n()) %>%
+  ungroup()
+
+# Select only candidates in the general election
+contb.by_cand_county <-subset(contb.by_cand_county, 
+                              cand_nm %in% levels(election$candidate))
+
+# Add election results
+contAndResults <- merge(x = contb.by_cand_county, 
+                        y = subset(results, 
+                                   select = c(county, candidate, count_vote)),
+                        by.x = c("county", "cand_nm"), 
+                        by.y = c("county", "candidate"))
+
+# Remove duplicate caused by results merger
+contAndResults <- unique(contAndResults) 
+
+# Plot results
+ggplot(data = contAndResults, aes(x = contb_total, y = count_vote)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = '#46afd2') +
+  scale_y_continuous(labels = comma) +
+  labs(x = "Contributions Received ($)", y = "Vote Count")
+
+```
+
+There was a strong relationship between the contributions received by a candidate and the corresponding votes that they received, but the distribution of values for both vote count and contribution value are quite spread out as the numbers increase. 
+
+In circumstances like this, the most appropriate thing to do before calculating a correlation is to transform the variables (using log10) so that they are more evenly distributed. 
+
+```{r votes v contb transform, echo=FALSE, message=FALSE, warning=FALSE}
+
+#with(contAndResults, cor.test(x = log10(contb_total), y = log10(count_vote)))
+#with(contAndResults, cor(x = log10(contb_total), y = log10(count_vote)))^2
+
+ggplot(data = contAndResults, 
+       aes(x = contb_total, y = count_vote)) +
+  geom_point(alpha = 0.5) +
+  scale_x_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000, 1000000), 
+                     labels = comma) +
+  scale_y_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000), 
+                     labels = comma) +
+  geom_smooth(method = "lm", color = '#46afd2') +
+  labs(x = "Contributions Received ($)", y = "Vote Count") +
+  ggtitle("Vote Counts v. Contributions Received")
+
+```
+
+Tranforming the data reduced the amount of variability in the prediction errors (show by the shaded grey area), which is what we are looking for. 
+
+There was a strong correlation (0.895 with 95% confidence that the value falls between 0.865 and 0.918) between the value of contributions received by a presidential candiate in a certain county and the number of votes that they received. 
+
+This is what I was hoping to find and was quite excited to get to this point. 
+
+### Vote Counts v. Contribution Values by Candidate Alignment
+
+In completing the comparisons for the presidential candidates, one of the things I realized was that I was missing all of the contribution information for the candidates who only campaigned during the primary election. 
+
+Because elections can be so influenced by candidate alignment, I thought that perhaps it would be important to capture all of the contributions made within a particular county and compare that to the results of the vote counts for the same alignment. 
+
+```{r party groupings, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Group ohio.2016 by party and county
+contb.by_party_county <- subset(ohio.2016, !is.na(county)) %>%
+  group_by(county, cand_party) %>%
+  summarise(contb_total = sum(contb_receipt_amt),
+            contb_mean = mean(contb_receipt_amt),
+            contb_median = median(contb_receipt_amt),
+            contb_n = n()) %>%
+  ungroup()
+
+# Create dataframe of candidate party alignment and merge with election results
+cand_names <- levels(election$candidate)
+alignment <- c("Democrat", "Other", "Other", "Other", "Republican")
+parties <- data.frame(cand_names, alignment)
+
+election <- merge(x = election, y = parties, 
+                  by.x = "candidate", by.y = "cand_names",
+                  all.x = T)
+
+# Group election results by alignment
+election.by_party_county <- election %>%
+  group_by(county, alignment) %>%
+  summarise(count_vote = sum(count_vote)) %>%
+  ungroup()
+
+# Merge results by party with contributions by party
+partyAndResults <- merge(x = contb.by_party_county, 
+                         y = election.by_party_county, 
+                         by.x = c("county", "cand_party"),
+                         by.y = c("county", "alignment"))
+
+# Plot results
+ggplot(data = partyAndResults, aes(x = contb_total, y = count_vote)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = '#46afd2') +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(labels = comma) +
+  labs(x = "Contributions Received ($)", y = "Vote Count")
+
+```
+
+The pattern of results looked very similar to what was found for the candidate contributions, but the plot had the same problem with the range of data and so it needed to be transformed. 
+
+```{r party vote by contb, echo=FALSE, message=FALSE, warning=FALSE}
+
+#with(partyAndResults, cor.test(x = log10(contb_total), y = log10(count_vote)))
+#with(partyAndResults, cor(x = log10(contb_total), y = log10(count_vote)))^2
+
+ggplot(data = partyAndResults, 
+       aes(x = contb_total, y = count_vote)) +
+  geom_point(alpha = 0.5) +
+  scale_x_continuous(trans = log10_trans(), labels = comma) +
+  scale_y_continuous(trans = log10_trans(), labels = comma) +
+  geom_smooth(method = "lm", color = '#46afd2') +
+  labs(x = "Contributions Received ($)", y = "Vote Count") +
+  ggtitle("Vote Counts v. Contributions Received, Grouped by Political Alignment")
+
+```
+
+The correlation of for votes to contributions received when grouped by party alignment (0.888 with 95% confidence that the value falls between 0.857 and 0.913) was incredibly similar to what was found above. In fact, each correlation fell within the confidence interval of the other. these results is of similar magnitude to that found when considering only contributions at the party level.
+
+This suggested that there didn't seem to be the need to attempt to include all the contributions towards candidates that had only participated in the primary election in the final prediction model.
+
+### Individual Contributions
+
+While the per county information was interesting, if I wanted to be able to include variables like election type or time course in my considerations I needed to examine the data at the individual contribution level. 
+
+```{r ind contb v votes, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Select relevant ohio.2016 columns
+contb.cand_party_date_county <- subset(ohio.2016, !is.na(county))
+contb.cand_party_date_county <- subset(contb.cand_party_date_county,
+                                       select = c(cand_nm, 
+                                                  cand_party, 
+                                                  contb_receipt_amt,
+                                                  contb_receipt_dt,
+                                                  election_tp,
+                                                  county))
+
+# Add election results and exclude non-presidential candidates
+contb.cand_party_date_county <- merge(x = contb.cand_party_date_county, 
+                                      y = subset(election, 
+                                                 select = c(candidate, 
+                                                            county,
+                                                            percent_vote,
+                                                            count_vote)),
+                                      by.x = c("cand_nm", "county"),
+                                      by.y = c("candidate", "county"))
+
+ggplot(data = contb.cand_party_date_county, 
+       aes(x = contb_receipt_amt, y = count_vote)) +
+  geom_point(alpha = 0.01) +
+  scale_y_continuous(labels = comma) +
+  labs(x = "Contribution Value ($)", y = "Vote Count")
+
+```
+
+This type of plot can be difficult to interpret at first, because it can be unclear what all of the different lines mean. The reason they occur is because there are a limited number of vote count values for each contribution amount. This is because a candidate may receive 100 votes in a county, but there are many different contributions they received that are associated with that vote count. However, the key to interpretation is that if there is a correlation similar to what we have found above, **the contribution values associated with the lines closer to the top will be more to the right than the ones on the bottom**.
+
+This doesn't seem to be the case, but there was the same issue with the distribution of the results, so my next step was to transform the data as I had done before. 
+
+As a side note, we can see the impact of only including the presidential candidates in plot. We see the same general limit of \$2,700 for the contribution values, with a \$5,000 outlier around the 175,000 vote count.
+
+```{r log transform ind contb v votes, echo=FALSE, message=FALSE, warning=FALSE}
+
+#with(contb.cand_party_date_county, 
+#     cor.test(x = log10(contb_receipt_amt), y = log10(count_vote)))
+#with(contb.cand_party_date_county, 
+#     cor(x = log10(contb_receipt_amt), y = log10(count_vote)))^2
+
+ggplot(data = contb.cand_party_date_county, 
+       aes(x = contb_receipt_amt, y = count_vote)) +
+  geom_point(alpha = 0.01) +
+  scale_x_continuous(trans = log10_trans(), 
+                     breaks = c(1, 10, 100, 1000),
+                     labels = comma) +
+  scale_y_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000),
+                     labels = comma) +
+  geom_smooth(method = "lm", color = '#46afd2') +
+  labs(y = "Vote Count", x = "Contribution Value ($)") +
+  ggtitle("Vote Counts v. Individual Contribution Values")
+
+```
+
+The slope of the line in this plot says that there is a very slight correlation between vote count and the individual contributions (0.0539 with 95% confidence that the value is between 0.0464 and 0.0613). However, even though this value is considered mathematically significant, for all practical considerations, it explains almost 0% of the variation in the data. 
+
+When I first received this result I was very surprised that there was essentially no correlation. In the light of the high correlations for the total values, it seemed that there must be some critical interactions happening that would improve the ability to explain the variations in the data. My plan was to explore the impacts of some of the other variables explored above, such as political alignment, contribution date, geography or election type. 
+
+I did end up discovering why there was such a substantial difference between the two, but rather than spoil the surprise, I'm going to keep walking through the journey. 
+
+## Summary of Findings from Bivariate Analysis
+
+### Primary investigation focus
+
+As I've mentioned, the primary focus for this project was to investigate the relationship between the number of votes a candidate receives in the presidential election and the number of financial contributions they receive. 
+
+The results that I found for this were generally surprising. 
+
+Firstly, I found a very strong correlation between the total value of contributions received per county and the number of votes a candidate received. This was unexpected for me. While I expected there to be a correlation, I didn't think that it would be as strong as it was (close to 0.9).
+Talk about some of the relationships you observed in this part of the \
+investigation. How did the feature(s) of interest vary with other features in \
+the dataset?
+
+Secondly, I was then even more surprised to find almost no correlation between the election results and the individual contribution amounts. I was convinced that something was missing here and wanted to explore further. The explorations into the other variables did provide some insights. 
+
+### Other key data features
+
+There were differences in how contributions values ranged throughout the state. While the sum of contributions in larger city areas was higher than for less populated areas, the typical contributions were higher outside of the city. 
+
+When contributions were made differed between the politcal alignments, and, generally, contributions to the two election types were split into two time segments. 
+
+It was also discovered that while Republican candidates received less contributions in number than Democratic candidates, they received a higher total value of contributions, and a typically higher amount for an individual contribution. 
+
+Given that there were so many interactions between the variables, this suggested that there was a relationship between the individual contribution amounts and the election results but that it was mediated by some of these other variables. 
+
+Because there was such a similar correlation between vote counts and contribution values when contributions to non-general election candidates were included, I decided not to pursue that avenue any further. 
+
+### Strongest relationship
+
+The strongest relationship was between the result counts and contribution values for the candidates for each county. In some regards, given the strength of the correlation, it could be possible to just leave the investigation there, but, if I did that, I would only be able to predict count results once all contributions values were calculated. For use in the 'real world' this doesn't seem very helpful and so I still wanted to pursue the individual contributions. 
+
+# Multivariate Exploration
+
+## Interactions with 'Other' Variables
+
+To gain a better understanding of how so of the other variables might interact with the correlation between election results and individual contributions, I explored some of the interactions between these variables with contribution values. 
+
+### Value of Contributions over Time by Party
+
+One of the resources that informed my direction as I moved forward with building my model was a [podcast episode](https://www.npr.org/2016/11/15/502074201/why-polls-predicted-a-hillary-clinton-win-and-were-so-wrong-about-the-election) from Hidden Brain (one of my favorite podcasts). An historian by the name of Allan Lichtman discussed his process for predicting election outcomes (he has done so correctly for the last nine presidential elections) and said that the hoopla that is made of the time course of the election cycle is more a product of the media than something that contributes to predictive value. 
+
+As a result, I decided not to spend much time focusing on using data over time as part of my predictive model, but instead decided to investigate whether I could find a period of time during the election that could be used as an appropriate subset to predict the final outcome. Obviously this would need to be before the results were finalized!
+
+```{r value over time by party, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(data = ohio.2016, 
+       aes(x = week, y = contb_receipt_amt, color = cand_party)) +
+  geom_line(stat = 'summary', fun.y = sum) +
+  scale_color_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Party')) +
+  scale_x_date(date_breaks = "2 months",
+               date_labels = "%b %y") +
+  scale_y_continuous(labels = comma) +
+  labs(x = "", y = "Value of Contributions per Week ($)") +
+  ggtitle("Value of Contributions per Week \nby Political Alignment") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+By plotting over time, and comparing contributions by political alignment, we see that there are clear differences in contribution patterns for candidates of the two major parties. 
+
+For Democrats, the value of contributions per week starts off low and generally increases through the entire course of the election period. 
+
+For Republicans, the value of contributions per week starts high, spikes up and down to dropping very low and then spikes back up again. 
+
+While I planned to stick with finding a single point in time to use as a predictor, if time course information were used, the different patterns in contribution rates for the different political alignmetns could give some insight into how tracking the information over time, and using this to inform predictions, could be confusing - depending on when you picked for your time course, the data shows differing support for candidates of the political alignments. 
+It gives a clear visualization of the median value of contributions towards candidates of the different political parties over time. **Add more info**
+
+### Faceted by Election Type
+
+I had found earlier that election type appeared to act as a helpful tag for creating time boundaries for contributions and so I wanted to see how that would interact with the data above. 
+
+```{r value over time by party facet by election, echo=FALSE, message=FALSE, warning=FALSE, fig.height=5, fig.width=10.5}
+
+# Change facet order
+ohio.2016$election_tp <- factor(ohio.2016$election_tp, 
+                                levels = c("P2016","G2016"))
+# List for facet labels
+election_names <- c(`P2016` = "Primary", `G2016` = "General")
+
+ggplot(data = ohio.2016, 
+       aes(x = week, y = contb_receipt_amt, color = cand_party)) +
+  facet_wrap(~election_tp, labeller = as_labeller(election_names)) +
+  geom_line(stat = 'summary', fun.y = sum) +
+  scale_color_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Alignment')) +
+  scale_x_date(date_breaks = "2 months",
+               date_labels = "%b %y") +
+  labs(x = "", y = "Value of Contributions per Week ($)") +
+  ggtitle("Value of Contributions per Week by Political Alignment per Election Type") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+Splitting the contributions into the two election types reinforced the findings from above. 
+
+For each election type we see similar patterns to what were observed overall. Contributions per week for Democratic candidates typically grew over time, while for Republican canidates it typically started high and then fluctuated, but trended down towards the associated time period. (This pattern is actually supported by the correlation between contributions values and time that was found in the pairwise plots, the found a slight negative correlation between the two) 
+
+### Total Contributions by Alignment per Election
+
+I also noticed that overall, contributions for Republican candidates seems much higher than Democratic candidates in the primary election, but the values seemed closer in the general election. 
+
+```{r total contributions by party and election, echo=FALSE, message=FALSE, warning=FALSE}
+
+primary <- subset(ohio.2016, election_tp == 'P2016')
+general <- subset(ohio.2016, election_tp == 'G2016')
+
+#by(primary$contb_receipt_amt, primary$cand_party, summary)
+#by(general$contb_receipt_amt, general$cand_party, summary)
+
+ggplot(data = ohio.2016, 
+       aes(x = cand_party, y = contb_receipt_amt, fill = cand_party)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~election_tp, labeller = as_labeller(election_names)) +
+  scale_fill_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Alignment')) +
+  scale_y_continuous(labels = comma) +
+  labs(x = "", y = "Contribution Value ($)") +
+  ggtitle("Total Contributions by Political Alignment \nper Election Type") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+```
+
+These results were slightly unexpected for me in that the differences in contributions were so different. The number of contributions to Republican candidates in the primary elections were almost double those of Democratic candidates. In the General election, the order reversed, but not to such a degree of difference, with Democratic candidate receiving slight more in total contribution value than the Republican candidate. 
+
+## Incorporating into Primary Focus
+
+With this additional information, I started to incorporate each of the other variables into the correlation between individual contributions and election results to discover their impact. 
+
+### Candidate Alignment
+
+Candidate alignment appeared to have a clear influence over how results panned out so this was the first variable I added into my previous scatter plot. I retained the use of the log transformations, as had been done previously. (A reminder that this data only includes contributions for the general election candidates)
+
+```{r scatter by party, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Democrat correlation
+#with(subset(contb.cand_party_date_county, 
+#            cand_party == 'Democrat'), 
+#     cor.test(x = log10(contb_receipt_amt), y = log10(count_vote)))
+
+# Republican correlation
+#with(subset(contb.cand_party_date_county, 
+#            contb.cand_party_date_county$cand_party == 'Republican'), 
+#     cor.test(x = log10(contb_receipt_amt), y = log10(count_vote)))
+
+#summary(contb.cand_party_date_county$contb_receipt_amt)
+
+ggplot(data = contb.cand_party_date_county, 
+       aes(x = contb_receipt_amt, y = count_vote, color = cand_party)) +
+  geom_point(alpha = 0.01) +
+  geom_smooth(method = "lm") +
+  scale_x_continuous(trans = log10_trans(),
+                     breaks = c(1, 100, 5000),
+                     labels = comma) +
+  scale_y_continuous(trans = log10_trans(), labels = comma) +
+  scale_color_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Alignment')) +
+  labs(x = "Contribution Value ($)", y = "Vote Count") +
+  ggtitle("Count Vote v Contribution Values by Alignment")
+
+```
+
+The plot showed that there was some interaction between candidate alignment and the basic interaction. For the Republican candidate, there was no correlation between vote counts and contribution values, but there was a slight positive relationship for the Democratic candidate. (While I included the data for candidates classified with 'Other' as their political alignment for completeness, these correlations were not a focus of my investigation because they accounted for such a small amount of the data)
+
+This was caused by the fact that while the contribution values for the highest vote counts still spanned a broad range, the contribution values for the lower vote counts for the Democratic candidate were typically lower than for the higher vote counts. 
+
+That being said, while the correlation for the Democratic candidate was an improvement - double the previous value, it was still only 0.111 (with a 95% confidence of the value between 0.103 and 0.121) which is still not especially meaningful. 
+
+### Election Type
+
+Again, there had been interactions between the contribution values, candidate alignment and election types, so I layered on election type to see  
+
+```{r scatter by party faceted by election, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Democrat by Primary correlation
+#with(subset(contb.cand_party_date_county, 
+#            contb.cand_party_date_county$cand_party == 'Democrat' & 
+#              contb.cand_party_date_county$election_tp == 'P2016'), 
+#     cor.test(x = log10(contb_receipt_amt), y = log10(count_vote)))
+
+# Democrat by General correlation
+#with(subset(contb.cand_party_date_county, 
+#            contb.cand_party_date_county$cand_party == 'Democrat' &
+#              contb.cand_party_date_county$election_tp == 'G2016'), 
+#     cor.test(x = log10(contb_receipt_amt), y = log10(count_vote)))
+
+# Republican by Primary correlation
+#with(subset(contb.cand_party_date_county, 
+#            contb.cand_party_date_county$cand_party == 'Republican' &
+#              contb.cand_party_date_county$election_tp == 'P2016'), 
+#     cor.test(x = log10(contb_receipt_amt), y = log10(count_vote)))
+
+# Republican by General correlation
+#with(subset(contb.cand_party_date_county, 
+#            contb.cand_party_date_county$cand_party == 'Republican' &
+#              contb.cand_party_date_county$election_tp == 'G2016'), 
+#     cor.test(x = log10(contb_receipt_amt), y = log10(count_vote)))
+
+# Plotting
+ggplot(data = contb.cand_party_date_county, 
+       aes(x = contb_receipt_amt, y = count_vote, color = cand_party)) +
+  facet_wrap(~election_tp, labeller = as_labeller(election_names)) +
+  geom_point(alpha = 0.01) +
+  geom_smooth(method = "lm") +
+  scale_x_continuous(trans = log10_trans(), 
+                     breaks = c(1, 100, 5000), 
+                     labels = comma) +
+  scale_y_continuous(trans = log10_trans(), labels = comma) +
+  scale_color_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Alignment')) +
+  labs(x = "Contribution Values ($)", y = "Vote Count") +
+  ggtitle("Vote Count v Contribution Value by Party per Election Type")
+
+```
+
+Adding in the election type showed another layer of interaction. The correlation size and direction remained relatively the same for the Democratic candidate, but election type substantially changed the correlations for the Republican candidate. 
+
+For the Democratic candidate, correlations remained relatively unchanged from what was found above across each election.
+
+* Primary: 0.121, 95% confidence interval - 0.107 to 0.136
+* General: 0.108, 95% confidence interal - 0.097 to 0.119
+
+For the Republican candidate, for primary election contributions, the correlation between contribution values and the general election vote count was actually negative, but it became slightly positive for the general election. 
+
+* Primary: -0.0199, 95% confidence interval - -0.0386 to -0.0013
+* General: 0.0906, 95% confidence interval - 0.0709 to 0.1103
+
+However, even with these inclusions it still felt like much less of the differences in the data were being explained than could be expected. 
+
+## Look at Geography
+
+I knew that geography had shown differences in contribution values and so I turned my attention back here to see whether I could find something there that could provide a better explanation of the differences in votes and contribution values. 
+
+### Contributions across the State by Political Alignment by Election Type
+
+I plotted all of the contribution values (not just those for the general election candidates) as I had done above, and then colored them by political alignment and split them into election types.
+
+```{r contributions by party maps, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+p3 <- ggplot() +
+  geom_polygon(data = ohio.map, aes(x = long, y = lat, group = group),
+               color = "#A9A9A9", fill = "#F8F8F8") +
+  geom_point(data = subset(ohio.2016, election_tp == "P2016"), 
+             aes(x = long, y = lat, 
+                 color = cand_party, size = contb_receipt_amt), 
+             alpha = 0.02, position = "jitter") +
+  scale_x_continuous(limits = c(-85, -80), breaks = seq(-85, -80, 1)) +
+  scale_y_continuous(limits = c(38, 42), breaks = seq(38, 42, 1)) +
+  coord_fixed(1.3) +
+  scale_color_manual(values=c("#0000ff", "#00b300", "#ff0000"), 
+                    guide = guide_legend(title = 'Candidate \nAlignment', 
+                                         override.aes = list(alpha = 1, 
+                                                             size = 2))) +
+  scale_size_continuous(range = c(0.25, 20), 
+                        guide = guide_legend(title = 'Contribution \nAmount', 
+                                         override.aes = list(alpha = 1))) +
+  ggtitle("Primary Election Contributions \nacross the State") +
+  theme_void()
+
+p4 <- ggplot() +
+  geom_polygon(data = ohio.map, aes(x = long, y = lat, group = group),
+               color = "#A9A9A9", fill = "#F8F8F8") +
+  geom_point(data = subset(ohio.2016, election_tp == "G2016"), 
+             aes(x = long, y = lat, 
+                 color = cand_party, size = contb_receipt_amt), 
+             alpha = 0.01, position = "jitter") +
+  scale_x_continuous(limits = c(-85, -80), breaks = seq(-85, -80, 1)) +
+  scale_y_continuous(limits = c(38, 42), breaks = seq(38, 42, 1)) +
+  coord_fixed(1.3) +
+  scale_color_manual(values=c("#0000ff", "#00b300", "#ff0000"), 
+                    guide = guide_legend(title = 'Candidate \nAlignment', 
+                                         override.aes = list(alpha = 1, 
+                                                             size = 2))) +
+  scale_size_continuous(range = c(0.25, 10), 
+                        guide = guide_legend(title = 'Contribution \nAmount',
+                                             override.aes = list(alpha = 1))) +
+  ggtitle("General Election Contributions \nacross the State") +
+  theme_void()
+
+```
+
+```{r contributions by parties plot, echo=FALSE, message=FALSE, warning=FALSE, fig.height=5, fig.width=10.5}
+
+grid.arrange(p3, p4, ncol = 2)
+
+```
+
+And with this, we can see so many of the different elements of what we have been discussing layered on top of each other. 
+
+We can see a lot more contributions for Republican candidates in the primary election, and a weighting towards the Democratic candidate for the general election. 
+
+We can also see clusters of support for Republican or Democratic candidates that often fall within county boundaries. 
+
+### Relative Election Results by County
+
+This suggested that the location of where the contribution was made might be the missing factor in understanding the relationship to the final election results.
+
+```{r rearrange data to wide, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Create wide data for vote count
+resultsCount.wide <- subset(results, select = -c(percent_vote, ZIP.Code))
+resultsCount.wide <- unique(resultsCount.wide)
+resultsCount.wide <- dcast(resultsCount.wide, 
+                           county ~ candidate,
+                           value.var = 'count_vote')
+names(resultsCount.wide) <- c("county", 
+                              "clinton", 
+                              "duncan", 
+                              "johnson", 
+                              "stein", 
+                              "trump")
+
+resultsCount.wide$relCount <- (resultsCount.wide$clinton - 
+                                     resultsCount.wide$trump)
+resultsCount.wide$county <- tolower(resultsCount.wide$county)
+
+# Create wide data for vote percentage
+resultsPercent.wide <- subset(results, select = -c(count_vote, ZIP.Code))
+resultsPercent.wide <- unique(resultsPercent.wide)
+resultsPercent.wide <- dcast(resultsPercent.wide,
+                             county ~ candidate,
+                             value.var = 'percent_vote')
+names(resultsPercent.wide) <- c("county", 
+                                "clinton", 
+                                "duncan", 
+                                "johnson", 
+                                "stein", 
+                                "trump")
+
+resultsPercent.wide$relPercent <- (resultsPercent.wide$clinton - 
+                                     resultsPercent.wide$trump)
+resultsPercent.wide$county <- tolower(resultsPercent.wide$county)
+
+# Merge percentage and count info with map info
+ohio.map <- merge(x = ohio.map, y = subset(resultsPercent.wide, 
+                                           select = c(county, relPercent)),
+                  by.x = 'subregion', by.y = 'county',
+                  all.x = T)
+
+ohio.map <- merge(x = ohio.map, 
+                  y = subset(resultsCount.wide, 
+                             select = c(county, relCount)),
+                  by.x = 'subregion', 
+                  by.y = 'county',
+                  all.x = T)
+
+ohio.map <- arrange(ohio.map, group, order)
+
+```
+
+### Relative Vote Count by Party per County
+
+To determine whether the map of the contributions related to the election results, I decided to find the relative difference in vote counts between the candidates of the two major parties. If the Democratic candidate had received more votes, the county would be blue, and if the Republican candidate had received more votes, the county would be red. 
+
+```{r relative vote counts, echo=FALSE, message=FALSE, warning=FALSE, fig.width=5, fig.height=3.5, fig.align='center'}
+
+ggplot() +
+  geom_polygon(data = ohio.map, 
+               aes(x = long, y = lat, group = group, fill = relCount), 
+               color = 'grey') +
+  scale_fill_gradient2(low = "#ff0000",
+                       mid = "white",
+                       high = "#0000ff",
+                       name = "Difference in Vote Counts") +
+  geom_point(data = cities, 
+             aes(x = city_long, y = city_lat), 
+             color = '#808080', size = 3) +
+  geom_text(data = cities, 
+            aes(x = city_long, y = city_lat, 
+                label = city_names, color = I('#303030')), 
+            size = 5, hjust=-0.06, vjust=0) +
+  coord_fixed(1.3) +
+  labs(x="", y="") +
+  ggtitle("Differences in Vote Counts for Major Party Candidates") +
+  theme_void()
+
+```
+
+The plot did start to highlight some of the concentrations but it didn't allow for a clear understanding of the results. When the Democratic candidate won a county, they typically did so in the major city centres, and so the relative vote counts were **much** higher than when the Repulican candidate won a county.
+
+(It is a good reminder that when determining election results, boundaries for electoral areas don't always match county areas, but it does remain a good long term comparison categorization) 
+
+### Relative Vote Percent by Party per County
+
+To reduce the impact of skew in result counts, I completed the same plots using percentage of votes (which acts similarly to finding the log10 of the differences, which is what we had done for vote counts in the scatterplot).
+
+```{r relative vote percent, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+p5 <- ggplot() +
+  geom_polygon(data = ohio.map, 
+               aes(x = long, y = lat, group = group, fill = relPercent), 
+               color = 'grey') +
+  scale_fill_gradient2(low = "#ff0000",
+                       mid = "white",
+                       high = "#0000ff", 
+                       name = "Relative Vote \nPercentages") +
+  geom_point(data = cities, 
+             aes(x = city_long, y = city_lat), 
+             color = '#808080', size = 3) +
+  geom_text(data = cities, 
+            aes(x = city_long, y = city_lat, 
+                label = city_names, color = I('#303030')), 
+            size = 5, hjust=-0.06, vjust=0) +
+  coord_fixed(1.3) +
+  labs(x="", y="") +
+  ggtitle("Differences in Vote Percentages \nfor Major Party Candidates") +
+  theme_void()
+
+```
+
+```{r relative vote percent plot, echo=FALSE, message=FALSE, warning=FALSE, fig.width=5, fig.height=3.5, fig.align='center'}
+
+p5
+
+```
+
+And finally we start to see a clear relationship about where contributions are happening and how that relates to general election results. Especially when compared to the general election result distributions of contribution, we can clearly see that areas of increased Democratic support in terms of contributions are also associated with support in terms of voting results. 
+
+This also explains why the correlation of vote counts and total contribution values had such different value when compared to the individual contribution values. The contribution values had been totaled according to county to correlate them with the county vote results. This inherently factored in the interaction that is found with location.
+
+## Facet Scatterplot by Candidate Alignment and County
+
+I finally realized that the interaction that I was missing from my scatterplot explorations was geography. 
+
+```{r county facet, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=23}
+
+# Find Group Means
+means.by_party_county <- contb.cand_party_date_county %>%
+  group_by(county, cand_party) %>%
+  summarise(contb_mean = mean(contb_receipt_amt),
+            count_mean = mean(count_vote)) %>%
+  ungroup()
+
+# Plot
+ggplot() +
+  geom_point(data = contb.cand_party_date_county,
+             aes(x = contb_receipt_amt, y = count_vote, color = cand_party),
+             alpha = 0.05) +
+  geom_point(data = means.by_party_county, 
+             aes(x = contb_mean, y = count_mean, color = cand_party), 
+             shape = 4, size = 2, stroke = 1.5) +
+  facet_wrap(~county, ncol = 5) +
+  scale_x_continuous(trans = log10_trans(), breaks = c(1, 100, 5000)) +
+  scale_y_continuous(trans = log10_trans(), 
+                     breaks = c(1000, 10000, 100000),
+                     labels = comma) +
+  scale_color_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Alignment',
+                                         override.aes = list(alpha = 1, 
+                                                             size = 2))) +
+  labs(x = "Contribution Value ($)", y = "Vote Count") +
+  ggtitle("Vote Counts v Contributions Receive per Candidate for each County")
+
+```
+
+Again, the correct interpretation of these charts is that if there is a positive correlation between the values of the individual contributions and the vote counts for the candidates in the county, then the mean (X) for the line on top should be further to the right than the line on the bottom (at least for the major parties).
+
+If you count up each of the plots, there are 65 counties out of the 88 where this is the case. This indicates that location (county) interacts with the correlation between candidate votes and contributions received. 
+
+This was the final piece of the puzzle that was needed to build what is expected to be a relatively strong model of the relationship between election results and contributions received. 
+
+For an interesting side note, I did a quick comparison of these plots to what was stated originally for the bellwether counties: 
+
+* Ottawa got it right
+* Wood very close but got it right
+* Stark also close but got it right
+* Sandusky also close and right
+* Tuscarawas got it right
+
+In each case, the counties had a higher vote count for the Republican candidate, and they also had positive correlations between contributions received and vote counts for the candidates of the major parties.
+
+From my perspective these plots provide a clear demonstration of the importance of **where** a contribution is made in terms of how it relates to vote counts. 
+
+## Building the Model
+
+You would think by this point that I was so close to done in terms of finalizing everything. But, everything takes time, so keep up, because we are almost there!
+
+As I've discussed before, I wanted to not just model the data but also use it for predictive purposes. This meant that I needed to not use the full dataset. Why? Because then I would be predicting the election results AFTER the election - which really doesn't help anyone. 
+
+However, after playing with some of the data, I realized that at this point, I wanted to keep as much of it as possible. So I decided just limit the data to a few days before the election. That would mean that, hypothetically, a few days before I could gather up all the data, run it through the model and provide my predictions of what I think would happen. So that meant I contribution data up until and including November 5, 2016. (Again, this model only used contributions made towards the general election candidates)
+
+### Selecting Model Components
+
+Based on what had been discovered above, I wanted to capture the four-way interaction between contribution values, candidate political alignment, the election type towards which the contribution was made and the county in which the contribution was made. 
+
+Because of the investigations above, all of the variables interacted with each other, this meant that I needed to add all of the lower order interactions as well as the individual variables into the model one at a time, and then add the larger interaction.
+
+### Initial Proposed Model
+
+Here's what that looked like:
+
+**Primary Relationship**
+
+* m1: log(`count_vote`) by log(`contb_receipt_amt`)
+
+**Individual Variables**
+
+* m2: `election_type`
+* m3: `county`
+* m4: `cand_party` 
+
+**Two-way Interactions**
+
+* m5: `election_tp` &ast; `county`
+* m6: `election_tp` &ast; `cand_party`
+* m7: `cand_party` &ast; `county`
+
+**Three-way Interaction**
+
+* m8: `election_tp` &ast; `cand_party` &ast; `county`
+
+```{r ind contb model, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+modelData <- contb.cand_party_date_county %>%
+  filter(!is.na(county) & contb_receipt_dt <= as.Date('2016-11-05'))
+
+# Load primary relationship
+m1 <- lm(I(log10(contb_receipt_amt)) ~ I(log10(count_vote)), data = modelData)
+
+# Load individual variables
+m2 <- update(m1, ~ . + election_tp)
+m3 <- update(m2, ~ . + county)
+m4 <- update(m3, ~ . + cand_party)
+# Load 2-way interactions
+m5 <- update(m4, ~ . + election_tp * county)
+m6 <- update(m5, ~ . + election_tp * cand_party)
+m7 <- update(m6, ~ . + cand_party * county)
+# Load 3-way interactions
+m8 <- update(m7, ~ . + cand_party * county * election_tp)
+
+mtable(m1, m2, m3, m4, m5, m6, m7, m8)
+
+```
+
+The summary of that process looks like this.
+
+```{r show ind contb model, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Read in representation of model for presentation clarity
+indModel <- read.csv("ind-model.csv")
+indModel
+
+```
+
+The way to read this is understand that each column tells you the model statistics for that step of the entry. The first column (m1) tells you the statistics of the base model, and the final column (m8) tells you the statistics of the final model, with all of the steps in between.
+
+We can see that the initial model explains 0.3% of the variance (R-squared value). With the addition of the interaction variables, the total variance explained did increase to 9.6%, but this is still comparatively low for the model to be used for predictive purposes. 
+
+One thing that I noticed is that adding election type contributed no change to the variance explained (at three decimal places) when added as the single variable, and only 0.6% when added with county, but 1.7% when added with candidate party. I was surprised that election type seemed to have so little impact but it seems that the last interaction is the most important.
+
+This still seemed unusual to me as I would have expected that more of the variation would have been explained here. 
+
+### Subsequent Proposed Model
+
+Because this model, using the individual contribution values, did not explain sufficient variance in the data, I went back to the total contribution values by candidate political alignment and county.
+
+I decided that given that there had been limited difference in the correlation when all of the contributions for a candidate were added in (as we saw above) that I would include them all to capture as much of the data as was available. 
+
+This is what the model looked like:
+
+**Primary Relationship**
+
+* m1: log(`count_vote`) by log(`contb_receipt_amt`)
+
+**Individual Variables**
+
+* m2: `election_type`
+* m3: `county`
+* m4: `cand_party` 
+
+**Two-way Interactions**
+
+* m5: `election_tp` &ast; `county`
+* m6: `election_tp` &ast; `cand_party`
+* m7: `cand_party` &ast; `county`
+
+I didn't need to add the final interaction because the contribution values were now summed.
+
+```{r total contb model, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+# Group ohio.2016 by candidates and county and election type
+modelData.comb <- subset(ohio.2016, 
+                    select = c(contb_receipt_dt, 
+                               contb_receipt_amt, 
+                               cand_party, 
+                               election_tp, county)) %>%
+  filter(!is.na(county) & contb_receipt_dt <= as.Date('2016-11-05')) %>%
+  group_by(county, cand_party, election_tp) %>%
+  summarise(contb_total = sum(contb_receipt_amt)) 
+
+# Add election results by party and county
+modelData.comb <- merge(x = modelData.comb, 
+                   y = election.by_party_county,
+                   by.x = c("county", "cand_party"), 
+                   by.y = c("county", "alignment"))
+
+# Make county a factor
+modelData.comb$county <- factor(modelData.comb$county)
+
+# Create model
+# Load primary relationship
+m1 <- lm(I(log(contb_total)) ~ I(log(count_vote)), 
+         data = modelData.comb)
+# Load individual variables
+m2 <- update(m1, ~ . + election_tp)
+m3 <- update(m2, ~ . + county)
+m4 <- update(m3, ~ . + cand_party)
+# Load 2-way interactions
+m5 <- update(m4, ~ . + election_tp * county)
+m6 <- update(m5, ~ . + election_tp * cand_party)
+m7 <- update(m6, ~ . + cand_party * county)
+
+mtable(m1, m2, m3, m4, m5, m6, m7)
+
+```
+
+Here's a summary of the new model:
+
+```{r show total contb model, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Read in representation of model for presentation clarity
+combModel <- read.csv("comb-model.csv")
+combModel
+
+```
+
+Again, we read the model information across the columns. Now, the initial model explained 73.4% of the data, and the final model exlained 98.7%.
+
+Now, with each new element introduced to the model there is an increase of at least 1% in the variance explained. For the individual variables, adding in the candidate alignment added the greatest contribution of an additional 10.7%. For the interactions, each of election type &ast; county and election type &ast; candidate alignment added less than 3% each. 
+
+### Model Explanation
+
+To assist in explaining how the model functions, I made a number of visualizations. 
+
+#### Interaction with Election Type
+
+```{r model etype interact, echo=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+
+ggplot(data = modelData.comb, 
+       aes(x = contb_total, y = count_vote, color = election_tp)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm") +
+  scale_x_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000, 1000000), 
+                     labels = comma) +
+  scale_y_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000), 
+                     labels = comma) +
+  scale_color_manual(labels = c('Primary', 'General'),
+                     values=c('#2985a3', '#33cccc'), 
+                    guide = guide_legend(title = 'Election Type')) +
+  labs(x = "Total Contributions ($)", y = "Vote Count") +
+  ggtitle("Vote Counts v. Contributions Received by Election Type")
+
+```
+
+There is an interaction from election results in how total contributions received predicts vote count. 
+
+Both contributions from the primary and general elections are positively correlated with the vote count in the county, but there is difference in how the predictions function at high contribution ranges. 
+
+At lower contribution values, the vote counts predicted by the contributions to the primary and general elections are similar. However, as the total contributions received increases, the vote count predicted from the general election contributions is higher than for the primary election contributions. 
+
+#### Interaction with Candidate Alignment
+
+```{r model party interact, echo=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+
+ggplot(data = modelData.comb, 
+       aes(x = contb_total, y = count_vote, color = cand_party)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm") +
+  scale_x_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000, 1000000), 
+                     labels = comma) +
+  scale_y_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000), 
+                     labels = comma) +
+  scale_color_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Alignment')) +
+  labs(x = "Total Contributions ($)", y = "Vote Count") +
+  ggtitle("Vote Counts v. Contributions Received by Candidate Alignment")
+
+```
+
+Due to the three types of alignment, the interaction due to candidate alignment is a bit more complicated. 
+
+For candidates of the two major parties the interaction occurs as follows. When the value of contributions recieved is lower, the number of votes predicted for Republican candidates will be higher than for Democratic candidates. 
+
+However, this order reverses when we get to high total contributions received. At high levels of total contributions, the votes predicted for Democratic candidates is higher than for Republican candidates. 
+
+This pattern appears to pick up on what was seen in the relative vote counts, in relation to larger cities where Democrats were more likely to receive contributions and much higher vote counts but this changed for smaller areas that had a smaller contribution total.
+
+For candidates not from the major parties, they only have predictions for total contributions under approximately \$10,000 and receiving 10,000 votes. Prediction of vote counts for the 'other' candidates falls below the Republican candidate and above the Democratic candidate at these lower contribution levels.
+
+#### Interaction with County
+
+```{r model county interact, echo=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+
+# Names of three counties
+county.subset <- c("adams", "hamilton", "van wert")
+
+ggplot(data = subset(modelData.comb, county %in% county.subset), 
+       aes(x = contb_total, y = count_vote, color = county)) +
+  geom_point(alpha = 0.75, size = 1.25) +
+  geom_smooth(method = "lm") +
+  scale_x_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000, 1000000), 
+                     labels = comma) +
+  scale_y_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000), 
+                     labels = comma) +
+  scale_color_brewer('County', palette = 'Dark2') +
+  labs(x = "Total Contributions ($)", y = "Vote Count") +
+  ggtitle("Vote Counts v. Contributions Received by County")
+
+```
+
+It is difficult to visualize this information with the full set of data so I selected three different counties to show the impact of the interaction with county. 
+
+In short, the most important takeaway is that the way in which contributions received predicts vote count is different between the counties. In this example we can see the strength of the correlation for Adams and Hamilton are similar, but the variability in errors (the grey shaded areas) associated with these correlations is quite different. Van Wert differs in it's correlation between contributions received and vote count and has prediction errors somewhere between the two. 
+
+One of the things that I do notice here, is that in contrast to the other two factors, predictions associated with county have a lot of variability the potential range of predictions (the shaded grey area) and differences in the range of the predictions at different contribution values (heteroscadacity). I realized that this could cause some issues for the model predictions.
+
+#### Interaction with Party by Election Type
+
+```{r model party etype interact, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.align='center'}
+
+ggplot(data = modelData.comb, 
+       aes(x = contb_total, y = count_vote, color = cand_party)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm") +
+  facet_wrap(~election_tp, labeller = as_labeller(election_names)) +
+  scale_x_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000, 1000000), 
+                     labels = comma) +
+  scale_y_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000), 
+                     labels = comma) +
+  scale_color_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Alignment')) +
+  labs(x = "Total Contributions ($)", y = "Vote Count") +
+  ggtitle("Vote Counts v. Contributions Received \nby Candidate Alignment per Election Type")
+
+```
+
+The interaction between candidate alignment and predictions of vote counts functions similarly for the primary election contribution values, but for the general election the, the point at which they cross over is much higher. That is, for the general election contributions, it takes until approximately \$100,000 in contributions received (comapared to approximately \$10,000 in the primary) for the prediction of votes for the Democratic candidate to exceed that of the Republican candidate.
+
+I also noticed the spread of predictions for these plots. It appears that there is greater precision in prediction around the \$10,000 mark for contributions received in either of the primary or general elections. 
+
+#### Interaction with Party by County
+
+```{r model party county interact, echo=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+
+ggplot() +
+  geom_point(data = subset(modelData.comb, county %in% county.subset), 
+       aes(x = contb_total, y = count_vote, 
+           color = county, shape = cand_party), 
+       stroke = 2) +
+  geom_smooth(data = subset(modelData.comb, county %in% county.subset),
+              aes(x = contb_total, y = count_vote, color = county), 
+              method = "lm") +
+  scale_x_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000, 1000000), 
+                     labels = comma) +
+  scale_y_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000), 
+                     labels = comma) +
+  scale_color_brewer('County', palette = 'Dark2') +
+  scale_shape_manual('Candidate Alignment', values=c(16, 4, 17)) +
+  labs(x = "Total Contributions ($)", y = "Vote Count") +
+  ggtitle("Vote Counts v. Contributions Received by County per Candidate Alignment")
+
+```
+
+Again, to show this relationship I have gone back to our three previously selected counties. What we are once again focusing on is that there are differences between the counties. 
+
+For the most part, the plot is a replication of what we saw above - points of the same color are in the same places and so are the associated lines. However, if we look at the shape of the dots, we find the differences. 
+
+What this plot shows us is that the relationship between how the prediction of vote counts changes across the counties for the different political alignments. 
+
+Starting with Hamilton (orange), we can see that for the Democrat (dot) and Republican (triangle) candidates the differences in contributions received doesn't have much impact on the predicted vote count, but there is a substantial difference in the vote count predicted for the 'other' candidates. In Van Wert (purple), the differences in contributions received for candidates in each of the political alignments impacts the prediction of votes received. Adams doesn't have any contributions for 'other' candidates, but does show differences in predicted vote counts for the different contribution values. 
+
+#### Interaction with County by Election Type
+
+```{r model etype county interact, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.align='center'}
+
+ggplot(data = subset(modelData.comb, county %in% county.subset), 
+       aes(x = contb_total, y = count_vote, color = county)) +
+  geom_point(size = 2, alpha = 0.75) +
+  geom_smooth(method = "lm") +
+  facet_wrap(~election_tp, labeller = as_labeller(election_names)) +
+  scale_x_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000, 1000000), 
+                     labels = comma) +
+  scale_y_continuous(trans = log10_trans(), 
+                     breaks = c(100, 1000, 10000, 100000), 
+                     labels = comma) +
+  scale_color_brewer('County', palette = 'Dark2') +
+  labs(x = "Total Contributions Received ($)", y = "Vote Count") +
+  ggtitle("Vote Counts v. Contributions Received by County per Election Type")
+
+```
+
+For the final plot to explain the interactions, we have our three counties and we can see that the election type to which the contribution was made changes how contributions received predicts vote count. 
+
+For the primary election contributions, all the counties have a relatively similar relationship between contributions received and predicted vote count. But general election contributions, the relationship is dramatically changed for Adams. In Adams, very similar totals for contributions received were associated with very different predictions for vote count. 
+
+### Alternate Model
+
+Because of the heteroscadacity associated with predictions with county, I created an additional model with `county` removed and planned to test the predictions of the full model with this simpler model.
+
+This is what the model looked like:
+
+**Primary Relationship**
+
+* m1a: log(`count_vote`) by log(`contb_receipt_amt`)
+
+**Individual Variables**
+
+* m2a: `election_type`
+* m3a: `cand_party` 
+
+**Two-way Interactions**
+
+* m4a: `cand_party` &ast; `county`
+
+```{r alternate model, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+# Create model from same data as above
+# Load primary relationship
+m1a <- lm(I(log(contb_total)) ~ I(log(count_vote)), 
+         data = modelData.comb)
+# Load individual variables
+m2a <- update(m1a, ~ . + election_tp)
+m3a <- update(m2a, ~ . + cand_party)
+# Load 2-way interaction
+m4a <- update(m3a, ~ . + cand_party * county)
+
+mtable(m1a, m2a, m3a, m4a)
+
+```
+
+```{r show alternate model, echo=FALSE, message=FALSE, warning=FALSE}
+
+altModel <- read.csv("alt-model.csv")
+altModel
+
+```
+
+
+This model is much simpler than the full model and still explains 95.2% of the variance in the data. If it can reduce variability in predictions, it could be very helpful to use.
+
+This model functions in a similar fashion to the above, with all of the details related to county removed.
+
+### Predicting Results
+
+Now that I had the model(s) explained, I wanted to look at the capabilities of the model to predict election results. Based on what I had seen of the prediction capabilities of the model, I decided to select a county that had contribution values for the general and primary elections from \$8,000 to \$50,000.
+
+```{r select counties, echo=FALSE, message=FALSE, warning=FALSE}
+
+selectCounties <- modelData.comb %>%
+  filter(contb_total >= 8000 & contb_total <= 50000)
+
+```
+
+Three counties were identified where contributions for candidate of the two major parties fell within this range for the general and primary elections. These were Erie, Greene, and Portage.
+
+I decided to pick Greene as, based on the above plots of contribution values and vote counts by county, it had the greatest differences in contribution rates and vote counts. I wasn't certain how well the model would do with prediction for smaller differences so I wanted to start with something that was most likely to find a difference. 
+
+```{r predicted values df function, echo=FALSE, message=FALSE, warning=FALSE}
+
+estimate_df <- function(model_name, data, level) {
+  modelEstimate = predict(model_name, 
+                          newdata = data,
+                          interval = "prediction",
+                          level = level)
+  data.level <- data.frame(exp(modelEstimate))
+  #rownames(data.level) <- c("Primary", "General")
+  
+  return(data.level)
+}
+
+```
+
+```{r line building function, echo=FALSE, message=FALSE, warning=FALSE}
+
+create_line <- function(data1, data2, data3, data4, data5, etype, ci_type) {
+  x <- c(35, 50, 65, 80, 95)
+  y <- c(data1[etype, ci_type],
+         data2[etype, ci_type],
+         data3[etype, ci_type],
+         data4[etype, ci_type],
+         data5[etype, ci_type])
+  line_points <- data.frame(x, y)
+}
+
+```
+
+```{r polygon data function, echo=FALSE, message=FALSE, warning=FALSE}
+
+prediction_data <- function(model_data, 
+                            model_name, 
+                            region, 
+                            alignment, 
+                            etype) {
+  # Subset data for republican
+  county.data <- subset(model_data, 
+                          county == region & cand_party == alignment)
+  rownames(county.data) <- c("Primary", "General")
+  
+  # Model data for CI from 0.95 to 0.35 at 0.15 intervals
+  county.95 <- estimate_df(model_name = model_name, 
+                           data = county.data, 
+                           level = 0.95)
+  
+  county.80 <- estimate_df(model_name = model_name, 
+                           data = county.data, 
+                           level = 0.80)
+  
+  county.65 <- estimate_df(model_name = model_name, 
+                           data = county.data, 
+                           level = 0.65)
+  
+  county.50 <- estimate_df(model_name = model_name, 
+                           data = county.data, 
+                           level = 0.50)
+  
+  county.35 <- estimate_df(model_name = model_name, 
+                           data = county.data, 
+                           level = 0.35)
+  
+  # Construct lines
+  upper <- create_line(data1 = county.35,
+                       data2 = county.50,
+                       data3 = county.65,
+                       data4 = county.80,
+                       data5 = county.95,
+                       etype = etype,
+                       ci_type = "upr")
+  
+  lower <- create_line(data1 = county.35,
+                       data2 = county.50,
+                       data3 = county.65,
+                       data4 = county.80,
+                       data5 = county.95,
+                       etype = etype,
+                       ci_type = "lwr")
+  
+  # Add order info
+  upper$order <- seq(1, 5, 1)
+  lower$order <- seq(10, 6, -1)
+  
+  predict_poly <- rbind(upper, lower)
+  
+  # Add group info - use alignment for plotting convenience
+  predict_poly$group <- alignment
+  # Add predicted from one of the predictions
+  predict_poly$predicted <- county.95[etype, "fit"]
+  # Add actual from data used for predicting
+  predict_poly$actual <- county.data[etype, "count_vote"]
+  
+  # Arrange by order for correct plotting
+  predict_poly <- arrange(predict_poly, order)
+  
+  return(predict_poly)
+}
+
+```
+
+```{r plotting function, echo=FALSE, message=FALSE, warning=FALSE}
+
+prediction_plotting <- function(polyR, polyD, title) {
+  # Get predicted values - mean works because all values are the same
+  predicted.d <- mean(polyD$predicted)
+  predicted.r <- mean(polyR$predicted)
+  
+  # Get actual values
+  actual.d <- mean(polyD$actual)
+  actual.r <- mean(polyR$actual)
+  
+  # Combine poly's together and sort for order
+  data <- rbind(polyR, polyD)
+  
+  # Create plot
+  plot <- ggplot() +
+    geom_polygon(data = data, 
+               aes(x = x, y = y, group = group, fill = group), 
+               alpha = 0.5) +
+    geom_hline(aes(yintercept = predicted.d, 
+                   color = "Democrat", #"#4d79ff"
+                   linetype = "Predicted Vote Count"), #"dashed"
+               size = 1) +
+    geom_hline(aes(yintercept = predicted.r, 
+                   color = "Republican", #"#ff6666""
+                   linetype ="Predicted Vote Count"), 
+               size = 1) +
+    geom_hline(aes(yintercept = actual.d, 
+                   color = "Democrat", 
+                   linetype = "Actual Vote Count"),
+               size = 1) +
+    geom_hline(aes(yintercept = actual.r, 
+                   color = "Republican", 
+                   linetype = "Actual Vote Count"),
+               size = 1) +
+    scale_fill_manual(values = c("#4d79ff", "#ff6666"), 
+                      guide = guide_legend(title = 'Predicted Vote Count Range')) +
+    scale_color_manual("Line Color", 
+                       values = c("Democrat" = "#4d79ff",
+                                  "Republican" = "#ff6666")) +
+    scale_linetype_manual("Line Type", values = c("Predicted Vote Count" = 2,
+                                                  "Actual Vote Count" = 1)) +
+    scale_x_continuous(breaks = seq(40, 90, 10)) +
+    scale_y_continuous(trans = log10_trans(),
+                       limits = c(5000, 350000),
+                       breaks = c(10000, 25000, 50000, 100000, 250000),
+                       labels = comma) +
+    labs(x = "Confidence Interval (%)", y = "Vote Count") +
+    ggtitle(title)
+  
+  return(plot)
+}
+
+```
+
+```{r plotting low function, echo=FALSE, message=FALSE, warning=FALSE}
+
+prediction_plotting_low <- function(polyR, polyD, title) {
+  # Get predicted values - mean works because all values are the same
+  predicted.d <- mean(polyD$predicted)
+  predicted.r <- mean(polyR$predicted)
+  
+  # Get actual values
+  actual.d <- mean(polyD$actual)
+  actual.r <- mean(polyR$actual)
+  
+  # Combine poly's together and sort for order
+  data <- rbind(polyR, polyD)
+  
+  # Create plot
+  plot <- ggplot() +
+    geom_polygon(data = data, 
+               aes(x = x, y = y, group = group, fill = group), 
+               alpha = 0.5) +
+    geom_hline(aes(yintercept = predicted.d, 
+                   color = "Democrat", #"#4d79ff"
+                   linetype = "Predicted Vote Count"), #"dashed"
+               size = 1) +
+    geom_hline(aes(yintercept = predicted.r, 
+                   color = "Republican", #"#ff6666""
+                   linetype ="Predicted Vote Count"), 
+               size = 1) +
+    geom_hline(aes(yintercept = actual.d, 
+                   color = "Democrat", 
+                   linetype = "Actual Vote Count"),
+               size = 1) +
+    geom_hline(aes(yintercept = actual.r, 
+                   color = "Republican", 
+                   linetype = "Actual Vote Count"),
+               size = 1) +
+    scale_fill_manual(values = c("#4d79ff", "#ff6666"), 
+                      guide = guide_legend(title = 'Predicted Vote Count Range')) +
+    scale_color_manual("Line Color",
+                       values = c("Democrat" = "#4d79ff",
+                                  "Republican" = "#ff6666")) +
+    scale_linetype_manual("Line Type", values = c("Predicted Vote Count" = 2,
+                                                  "Actual Vote Count" = 1)) +
+    scale_x_continuous(breaks = seq(40, 90, 10)) +
+    scale_y_continuous(trans = log10_trans(),
+                       limits = c(1000, 250000),
+                       breaks = c(5000, 10000, 25000, 50000, 100000, 250000),
+                       labels = comma) +
+    labs(x = "Confidence Interval (%)", y = "Vote Count") +
+    ggtitle(title)
+  
+  return(plot)
+}
+
+```
+
+```{r plotting high function, echo=FALSE, message=FALSE, warning=FALSE}
+
+prediction_plotting_high <- function(polyR, polyD, title) {
+  # Get predicted values - mean works because all values are the same
+  predicted.d <- mean(polyD$predicted)
+  predicted.r <- mean(polyR$predicted)
+  
+  # Get actual values
+  actual.d <- mean(polyD$actual)
+  actual.r <- mean(polyR$actual)
+  
+  # Combine poly's together and sort for order
+  data <- rbind(polyR, polyD)
+  
+  # Create plot
+  plot <- ggplot() +
+    geom_polygon(data = data, 
+               aes(x = x, y = y, group = group, fill = group), 
+               alpha = 0.5) +
+    geom_hline(aes(yintercept = predicted.d, 
+                   color = "Democrat", #"#4d79ff"
+                   linetype = "Predicted Vote Count"), #"dashed"
+               size = 1) +
+    geom_hline(aes(yintercept = predicted.r, 
+                   color = "Republican", #"#ff6666""
+                   linetype ="Predicted Vote Count"), 
+               size = 1) +
+    geom_hline(aes(yintercept = actual.d, 
+                   color = "Democrat", 
+                   linetype = "Actual Vote Count"),
+               size = 1) +
+    geom_hline(aes(yintercept = actual.r, 
+                   color = "Republican", 
+                   linetype = "Actual Vote Count"),
+               size = 1) +
+    scale_fill_manual(values = c("#4d79ff", "#ff6666"), 
+                      guide = guide_legend(title = 'Predicted Vote Count Range')) +
+    scale_color_manual("Line Color",
+                       values = c("Democrat" = "#4d79ff",
+                                  "Republican" = "#ff6666")) +
+    scale_linetype_manual("Line Type", values = c("Predicted Vote Count" = 2,
+                                                  "Actual Vote Count" = 1)) +
+    scale_x_continuous(breaks = seq(40, 90, 10)) +
+    scale_y_continuous(trans = log10_trans(),
+                       limits = c(5000, 4000000),
+                       breaks = c(10000, 25000, 50000, 100000, 
+                                  250000, 500000, 1000000, 2500000),
+                       labels = comma) +
+    labs(x = "Confidence Interval (%)", y = "Vote Count") +
+    ggtitle(title)
+  
+  return(plot)
+}
+
+```
+
+```{r combined plot function, echo=FALSE, message=FALSE, warning=FALSE}
+
+combined_plot <- function(model_data, model_name, region, titleP, titleG) {
+  # Create republican, primary data
+  data.rp <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Republican",
+                             etype = "Primary")
+  
+  # Create democrat, primary data
+  data.dp <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Democrat",
+                             etype = "Primary")
+  
+  # Create primary plot
+  plot.p <-prediction_plotting(polyR = data.rp, 
+                               polyD = data.dp, 
+                               title = titleP)
+  
+  # Create republican, general data
+  data.rg <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Republican",
+                             etype = "General")
+  
+  # Create democrat, general data
+  data.dg <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Democrat",
+                             etype = "General")
+  
+  # Create general plot
+  plot.g <-prediction_plotting(polyR = data.rg, 
+                               polyD = data.dg, 
+                               title = titleG)
+  
+  return(grid.arrange(plot.p, plot.g, ncol = 2))
+}
+
+```
+
+```{r combined plot low function, echo=FALSE, message=FALSE, warning=FALSE}
+
+combined_plot_low <- function(model_data, model_name, region, titleP, titleG) {
+  # Create republican, primary data
+  data.rp <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Republican",
+                             etype = "Primary")
+  
+  # Create democrat, primary data
+  data.dp <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Democrat",
+                             etype = "Primary")
+  
+  # Create primary plot
+  plot.p <-prediction_plotting_low(polyR = data.rp, 
+                                   polyD = data.dp, 
+                                   title = titleP)
+  
+  # Create republican, general data
+  data.rg <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Republican",
+                             etype = "General")
+  
+  # Create democrat, general data
+  data.dg <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Democrat",
+                             etype = "General")
+  
+  # Create general plot
+  plot.g <-prediction_plotting_low(polyR = data.rg, 
+                                   polyD = data.dg, 
+                                   title = titleG)
+  
+  return(grid.arrange(plot.p, plot.g, ncol = 2))
+}
+
+```
+
+```{r combined plot high function, echo=FALSE, message=FALSE, warning=FALSE}
+
+combined_plot_high <- function(model_data, model_name, region, titleP, titleG) {
+  # Create republican, primary data
+  data.rp <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Republican",
+                             etype = "Primary")
+  
+  # Create democrat, primary data
+  data.dp <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Democrat",
+                             etype = "Primary")
+  
+  # Create primary plot
+  plot.p <-prediction_plotting_high(polyR = data.rp, 
+                                    polyD = data.dp, 
+                                    title = titleP)
+  
+  # Create republican, general data
+  data.rg <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Republican",
+                             etype = "General")
+  
+  # Create democrat, general data
+  data.dg <- prediction_data(model_data = model_data,
+                             model_name = model_name,
+                             region = region,
+                             alignment = "Democrat",
+                             etype = "General")
+  
+  # Create general plot
+  plot.g <-prediction_plotting_high(polyR = data.rg, 
+                                    polyD = data.dg, 
+                                    title = titleG)
+  
+  return(grid.arrange(plot.p, plot.g, ncol = 2))
+}
+
+```
+
+```{r model testing m7 greene, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
+
+combined_plot(model_data = modelData.comb, 
+              model_name = m7, 
+              region = "greene",
+              titleP = "Greene Predictions \nfrom Primary (Original)",
+              titleG = "Greene Predications \nfrom General (Original)")
+
+```
+
+So what does this tell us? First of all, let's confirm what all of the lines and shading mean. The solid lines show the actual vote count that was found for the county. The dashed lines show what was predicted from the contribution totals from each election type. 
+
+The shaded areas show the range of values that fall within a certain confidence interval. For example, for the predictions for the votes for the Democratic candidate from the primary election contributions, at a confidence interval of 40%, the vote count values range from around 25,000 to slightly under 50,000. We would say that we are 40% confident that the actual vote count value falls in this range. If we look at the solid blue line, it does fall within this range. So that is good for the model. 
+
+So looking at the two charts, here's how it all falls out.
+
+**Primary**
+
+* Democrat Predicted: approximately 35,000 votes
+* Democrat Actual: appoximately 30,000 votes
+* Republican Predicted: approximately 60,000 votes
+* Republican Actual: approximately 50,000 votes
+
+The predicted vote count values were reasonably in range of the actuals, and the Republican candidate was predicted to win over the Democratic candidate, which actually occurred. This is a good start for the model!
+
+**General**
+
+* Democrat Predicted: approximately 25,000 votes
+* Democrat Actual: appoximately 30,000 votes
+* Republican Predicted: approximately 20,000 votes
+* Republican Actual: approximately 50,000 votes
+
+Here we start to run into some problems. The predictions for the Democratic candidate are actually quite close to the actuals, but this is not the case for the Republican candidate. In addition, the final outcome is also wrong - the Democratic candidate was predicted to win instead of the Republican candidate. 
+
+I wanted to compare this to the predictions for the alternate model, but first, here are some other things I observed about the charts.
+
+* Across the plots, the shaded areas are the same shape. This isn't something that I had expected but makes sense since they are coming from the same model.
+* There is a much greater range in the values the create the lower and upper confidence interval boundaries. While this is to be expected, I noticed that the increases were exponentially related, which is a result of the prediction model using the log of both contribution values and vote counts. 
+* This also means that if you track the lower bound values of the confidence interval, there is much less range in these values. For the predictions from the primary election contributions, the lower bound confidence interval values range from slight over \$25,000 at a 35% confidence interval to just over \$10,000 for the 95% confidence interval. For the upper boundary of the confidence intervals, the values range from approximately 40,000 votes to approximately 150,000 votes.
+
+#### Comparison to Alternate Model
+
+```{r model testing m4a greene, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
+
+combined_plot(model_data = modelData.comb, 
+              model_name = m4a, 
+              region = "greene",
+              titleP = "Greene Predictions \nfrom Primary (Alternate)",
+              titleG = "Greene Predications \nfrom General (Alternate)")
+
+
+```
+
+The first thing that is noticeable about these predictions is that for predictions from both the primary and general election contributions are in the correct direction. In addition, the reason that you cannot see the red dashed line for predicting the results for the Republican candidate from the primary election contributions is because it is covered by the actual line - the model predicted the actual result!
+
+When comparing the predictions of the two models, the range of the 95% confidence interval is typically greater for the alternate model, but the differences between the predicted values and the actual values are actually smaller. 
+
+I completed this type of comparison for multiple counties and discovered that this patterns were quite consistent - the original model would sometimes get the order of the predictions flipped, and the differences in predicted and actual values were closer for the alternate model. 
+
+As a result, **I decided to continue with the alternate model**.
+
+One of the things I found interesting about this process is the model that explained the lower amount of variance was actually better at predicting the results. I had recently read an article, aptly called ["Is R-Squared Useless?"](http://data.library.virginia.edu/is-r-squared-useless/) where the author discusses how using the amount of variance explained may not be a good method of selecting models for prediction, and that instead, the predictions from the model should be compared and tested and the model selected based on these results. (Which is what I did!) I had wondered if these types of circumstances were more rare and not something that I would encounter, but I apparently discovered this to be true with the very first model I created! 
+
+#### Comparison Across Counties 
+
+Now that I had selected my model, I wanted to see how it ran across a number of different scenarios. I wanted to look at counties that had wins for Democrats and Republicans and when the final vote counts were close, and also at different ranges of contribution values. 
+
+##### Close Results
+
+```{r model comparison montgomery, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
+
+combined_plot(model_data = modelData.comb, 
+              model_name = m4a, 
+              region = "montgomery",
+              titleP = "Montgomery Predictions \nfrom Primary",
+              titleG = "Montgomery Predictions \nfrom General")
+
+```
+
+In this case, the results for the two candidates were very close. I was excited to see that the model did predict the correct order for results, more votes for the Republican candidate than the Democratic candiate. In this case, the predictions from the primary election contributions were much closer to the actual results than those from the general election contributions. 
+
+One thing that is worth pointing out here is that typically in these types of circumstances, to say that a difference exists you would want the range of the confidence intervals to actually not overlap. So far, while we've seen predictions in the correct direction, we've not found a case where there isn't an overlap - something to keep an eye on. 
+
+##### Republican Win - Lower Range
+
+```{r model comparison erie, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
+
+combined_plot_low(model_data = modelData.comb, 
+                  model_name = m4a, 
+                  region = "erie",
+                  titleP = "Erie Predictions \nfrom Primary",
+                  titleG = "Erie Predictions \nfrom General")
+
+```
+
+In this case, the predictions form the general election were more accurate - the predictions from the primary underestimate the results - but each had a reasonable prediction of the relative diferences between the votes. 
+
+##### Republican Win - Higher Range
+
+```{r model comparison warren, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
+
+combined_plot_high(model_data = modelData.comb, 
+                  model_name = m4a, 
+                  region = "warren",
+                  titleP = "Warren Predictions \nfrom Primary",
+                  titleG = "Warren Predictions \nfrom General")
+
+```
+
+A similar pattern as was found above is seen. Again, the predictions from the general election were more accurate - and actually incredibly close. Both got the order correct and the predictions from the primary had a similar difference betwen the candidates but underestimate the result counts. 
+
+##### Democrat Win
+
+```{r model comparison lucas, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
+
+combined_plot(model_data = modelData.comb, 
+              model_name = m4a, 
+              region = "lucas",
+              titleP = "Lucas Predictions \nfrom Primary",
+              titleG = "Lucas Predictions \nfrom General")
+
+```
+
+So far, all of the counties we had viewed had wins for the Republican candidates, so I wanted to see how well the model did at prediction when the Democratic candidate won. 
+
+For the first county I selected it did not look good. Predictions from both the primary and general election contributions had the Republican candidate winning. I looked into this further and discovered that in this county, while the Democractic candidate did win, the contributions for the Democratic candidate were quite a bit lower than for the Republican candidate, so I decided to look at some other counties. 
+
+##### Democrat Win - Lower Range
+
+```{r model comparison athens, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
+
+combined_plot_low(model_data = modelData.comb, 
+                  model_name = m4a, 
+                  region = "athens",
+                  titleP = "Athens Predictions \nfrom Primary",
+                  titleG = "Athens Predictions \nfrom General")
+
+```
+
+Now the model was able to predict the win for the Democratic candidate over the Republican candidate, but the actual values predicted for the Democratic candidate differed far more from the actual than they did for the Republican candidate. 
+
+This is the first time that we've seen a clear difference in the shaded areas, but the predicted difference between the vote counts was much greater than the actual difference. 
+
+##### Democrat Win - Higher Range
+
+```{r model comparison hamilton, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
+
+combined_plot_high(model_data = modelData.comb, 
+                  model_name = m4a, 
+                  region = "hamilton",
+                  titleP = "Hamilton Predictions \nfrom Primary",
+                  titleG = "Hamilton Predictions \nfrom General")
+
+```
+
+The order of predictions is once again correct, with a more accurate prediction from the general election contributions. Both models do predict a relatively small difference between the two candidates. 
+
+# Summary of Findings from Multivariate Analysis
+
+### Key Findings
+
+The multivariate analysis supported the relationships that had been observed during the bivariate analysis. For the primary relationship between contribution values and vote counts, I found that all of candidate political alignment, county, and the election type to which a contribution was made, created differences in the primary relationship.  
+
+These interactions also layered on top of each other so that values for contributions and vote counts each differed with a combination of the 'other' variables. Election type created a difference in the pattern of contributions to candidates of the different political alignments, contribution patterns differed across counties between the primary and general elections, and vote counts differed between the candidates across the counties. 
+
+I also observed that county as a mitigating factor in the investigation of how candidate political alignment interacted with the prediction of vote counts from contribution values. 
+
+### Surprising Elements
+
+Perhaps the most surprising element is that while I was able to find interactions between the other variables and the primary relationship, I was still able to explain less variation than I would have expected. 
+
+### Model Strengths and Weakenesses
+
+Creation of the model also resulted in some surprises. I wasn't able to find the strength of relationship for prediction of vote counts based on individual contributions that I was hoping to find and so switched to using the totals of contributions per county. 
+
+The original model I proposed explained over 98% of the variance, but I noticed that from a prediction perspective it suffered from some heteroscadacity that might impact the quality of its predictions. This ended up being the case and so the alternate model that I moved forward with explained slightly less variance at approximately 95% but was still quite substantial in the variance it explained.
+
+In terms of predicting what I set out to predict - the numbers of vote counts from contribution values, the model did well in some areas but also had weaknesses. It did quite well at predicting the order of votes counts (who would win), but the confidence intervals for the ranges in the values were very large, even at low confidence intervals, there was often not a difference observed between the confidence intervals for the candidates of the two major parties. 
+
+In addition, the following was observed: 
+
+* Results were more accurate for Republican vote counts 
+* General was typically more accurate than the Primary
+* While the model can correctly predict wins for Republican and Democratic candidates, it is susceptible to errors when wins are associated with a much lower total value of contributions. 
+* Of the counties reviewed, the model correctly predicted the direction in 6 out of the 7 counties (85.7%)
+
+------
+
+# Final Plots and Summary
+
+### Election Type Interacts with Contribution Patterns to Candidates
+
+```{r Plot_One, echo=FALSE, message=FALSE, warning=FALSE, fig.height=5, fig.width=10.5}
+
+ggplot(data = ohio.2016, 
+       aes(x = week, y = contb_receipt_amt, color = cand_party)) +
+  facet_wrap(~election_tp, labeller = as_labeller(election_names)) +
+  geom_line(stat = 'summary', fun.y = sum) +
+  scale_color_manual(values=c("#4d79ff", "#66cc00", "#ff6666"), 
+                    guide = guide_legend(title = 'Candidate Alignment')) +
+  scale_x_date(date_breaks = "2 months",
+               date_labels = "%b %y") +
+  labs(x = "", y = "Value of Contributions per Week ($)") +
+  ggtitle("Value of Contributions per Week by Political Alignment per Election Type") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+When looking to predict vote counts, one of the features to understand is that contribution patterns to candidates change throughout the election cycle and especially between the two election types - primary elections where the party candidates are selected, and general elections where the president is elected. 
+
+In Ohio, contributors to Republican candidates made a greater value of contributions to candidates in the primary election than the general election and in the primary election their contributions almost doubled those made to Democratic candidates. However, in the general election, more contributions were made to Clinton (the Democratic nominee) than to Trump (the Republican nominee).
+
+If pundits were only, or primarily, looking at values of contributions within the general election period with which to make their predictions of who would win the presidential election, this may one reason that predicts were wrong regarding the eventual winner of the presidential election.
+
+There are a number of elements that do help give us a better picture of how contributions impact the number of votes a presidential election candidate will receive. These include the party of the candidate, and the type of election to which the contribution was made. 
+
+### Contributions to Candidates Align with Election Results
+
+```{r Plot_Two, echo=FALSE, message=FALSE, warning=FALSE, fig.height=5, fig.width=10.5}
+
+grid.arrange(p4, p5, ncol = 2, widths = 10:9)
+
+```
+
+If we map the contributions and compare those with the differences in votes received for Clinton and Trump, we can see that areas with concentrations of contributions towards Clinton align with the counties in which she won the vote count. 
+
+Using the general election contributions map, we can again see how if these were the only results evaluated that they may be taken as a sign of support for Clinton over Trump. It does make sense to consider that there is some correlation between contributions received and vote counts, but without the inclusion of the contributions in the primary elections, valuable information is missing. 
+
+### Predictions Can be Made from Contribution Values
+
+```{r Plot_Three, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10.5, fig.height=3.5}
+
+combined_plot(model_data = modelData.comb, 
+              model_name = m4a, 
+              region = "montgomery",
+              titleP = "Montgomery Predictions \nfrom Primary",
+              titleG = "Montgomery Predictions \nfrom General")
+
+```
+
+If we do incorporate contribution values from both the primary and elections and look at how they interact with candidate political alignment, we are able to make reasonably accurate predictions about who will win in a particular county. While the exact number of votes may be more in question, the model that was developed is able to consistently predict when Clinton would receive the most votes and when Trump would receive the most votes, even when the final election results were very close. 
+
+And we finally have what we have been waiting for!! In answer to the question posed at the beginning of this investigation, yes, there was information available to suggest that Trump would have the types of victories he came away with. If I was able to obtain information about the contributions made by candidate alignment across the election types, I believe that I would have a fair chance of predicting who would win the election.
+
+One side issue that I will note when using contribution data for predictions - I am uncertain when this information is made available publicly. If the data is regularly updated and available throughout the election cycle, (I wasn't able to work out if this was the case) then it is of benefit for predicting. But, if it is only available after the fact, while the model may have some reasonable prediction capacities, it wouldn't be very helpful in predicting the winner BEFORE it occured!
+
+------
+
+# Reflection
+
+## Unexpected Occurrences 
+The way the correlations ended up unfolding was unexpected for me. I didn't expect such a high correlation between the contribution totals and the vote counts given that this is real world data. In addition, I wasn't expecting such a low final correlation when using individual contributions compared to contribution totals. 
+
+I have a suspicion that it still might be possible to use the individual contribution information, but I'm not certain how to go about doing this.
+
+## Successes
+
+There were two key turning points in the progression of the project that reinforced that I was moving in the correct direction to achieve the goal I had set for myself. 
+
+The first was the creation of the maps showing the individual contributions by size and candidate alignment, and then splitting into election type. I actually completed this plot well before I had done a lot of other analysis because I was wanting to test my skills to see if I could produce the map in the first place. The resulting maps really helped me clue into some of the factors that might be influencing the final relationships. They also helped me to believe that it was worth persisting when I ran into other difficulties, because they confirmed that there really was something to find. 
+
+The second breakthrough was the creation of the set of plots faceted by county that showed the different relationships between contribution values and vote counts for the candidates across the state. It gave me an understanding that there was interconnectivity between the other variables and their connection to the primary relationship that I was exploring. 
+
+The final success was building the model. While it didn't do exactly what I had hoped to do - confidently predict differences in vote counts between major party candidates, it did consistently predict the winner, which to some extent covers what is typically looked at in an election. This was my first forray into independently building a prediction model and I was quite encouraged by the result.
+
+## Challenges
+
+Definitely the most challenging, or time consuming, component of the process was the data cleaning. This was a dataset about which I had no previous knowledge (apart from generally being aware of what happens in US elections) to inform my investigation of the data. I had to research most elements of the data to confirm how they functioned, to understand what I could and couldn't drop. Understanding how refunds could work, to finally make a decision to simply drop all associated records took the better part of a day!
+
+Another thing that I found somewhat challenging was compartmentalizing and limiting my thought progression to move from univariate, to bivariate, to multivariate. I kept wanting to run ahead as I could see different elements playing in. However, by disciplining myself to focus on which section I was currently working on, I was able to find insights that I may not have otherwise found and I did gain a much better understanding of the data as a whole. When I finally got around to modelling the data, the step by step process became even more understandable as this step-wise progression is also how we enter data into the model and it makes sense for us to fully understand the relationships at each level to help us to decide what should be included in the model. 
+
+My final challenges relate more to continuing to learn how to code. There were a couple of times where a had built a foundational plot or set of variables and then built other elements of the investigation off of this. I sometimes decided that I wanted to change a name or function of the foundational components and this would set off a chain reaction of errors. It reinforces to make sure you are happy with what you are doing originally before moving on and building on it!
+
+## Missing Elements and Potential Next Steps
+
+The largest missing element from this work, in my opinion, is the large confidence interval ranges that were found with the prediction model. Even at relatively low confidence interval percentages, the range of predicted vote counts was still often quite high. 
+
+I believe that a large source of this is that when the contribution values are totaled, the sum to a relatively small number of comparisons, just over 400 observations. When this information is split out into counties, it becomes even smaller. One of the potential ways to remedy this would be to utilize bootstrapping to create more robust sampling. It would be possible to take the original set of over 150,000 contributions and randomly sample them to build up many different representations of the possible combinations of vote counts and total contributions per county. This could then be combined together in building the model to hopefully reduce the range of the confidence intervals. 
+
+There are also a number of additional steps that could be taken to further explore the work that I have done. 
+
+1. Use the model to predict the results from other states - do the prediction capabilities hold up outside of Ohio?
+2. Use the model to predict the results for Ohio for the presidential election in other years - do the patterns of the 2016 election cycle mirror those found in previous years? 
+3. I used a very late time in the election cycle (data up to a few days beforehand), it would be interesting to see what predictions are possible earlier on, even predicting from the primary contributions with this model seemed useful in predicting the winner. 
+4. Given that Ohio does have bellwether counties it could be interesting to build a model that just predicts using information from those states. Essentially this and the point above are interested in, "What is the minimum amount of data you would need to still consistently predict the outcome?"
+
+The final additional development, that I think could yield some productive results, would be to rebuild the modelling but instead of predicting vote counts, only predict the win or loss of a candidate. This may prove more successful increasing confidence that differences between the candidates are seen.
