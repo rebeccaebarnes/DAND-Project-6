@@ -1,0 +1,256 @@
+Select rows from a data frame based on values in a vector
+https://stackoverflow.com/questions/11612235/select-rows-from-a-data-frame-based-on-values-in-a-vector
+Purpose: Remove rows with undesired values in a factor variable
+
+rotating axis labels in R
+https://stackoverflow.com/questions/1828742/rotating-axis-labels-in-r
+Purpose: Rotate x-tick labels
+
+ggplot2 colors : How to change colors automatically and manually?
+http://www.sthda.com/english/wiki/ggplot2-colors-how-to-change-colors-automatically-and-manually
+Purpose: Manually dictate color spread
+
+How to Get the Frequency Table of a Categorical Variable as a Data Frame in R
+https://www.r-bloggers.com/how-to-get-the-frequency-table-of-a-categorical-variable-as-a-data-frame-in-r/
+Purpose: Create frequency table
+
+How to select no of rows from Data frame
+https://stackoverflow.com/questions/25382095/how-to-select-no-of-rows-from-data-frame
+Purpose: Subset dataframe by number of rows
+
+ggplot2 barplots : Quick start guide - R software and data visualization
+http://www.sthda.com/english/wiki/ggplot2-barplots-quick-start-guide-r-software-and-data-visualization
+Purpose: Create a bar chart
+
+How to join (merge) data frames (inner, outer, left, right)?
+https://stackoverflow.com/questions/1299871/how-to-join-merge-data-frames-inner-outer-left-right
+Purpose: Merging data frames
+
+Merge Two Data Frames
+https://stat.ethz.ch/R-manual/R-devel/library/base/html/merge.html
+Purpose: Merge dataframes on different column names
+
+Plotting map
+https://s3.amazonaws.com/udacity-hosted-downloads/ud651/GeographyOfAmericanMusic.html
+Purpose: Find resources for plotting maps
+
+Mapping by county level with R
+https://stackoverflow.com/questions/23115972/mapping-by-county-level-with-r
+Purpose: Represent counties with R
+
+How to draw good looking maps in R
+https://uchicagoconsulting.wordpress.com/tag/r-ggplot2-maps-visualization/
+Purpose: Plot points on map
+
+Administrative regions map of a country with ggmap and ggplot2
+https://stackoverflow.com/questions/17723822/administrative-regions-map-of-a-country-with-ggmap-and-ggplot2
+Purpose: Create heat map
+
+How to find the length of a string in R?
+https://stackoverflow.com/questions/11134812/how-to-find-the-length-of-a-string-in-r
+Purpose: find length of int or str
+
+How to split a number into digits in R
+https://stackoverflow.com/questions/15498235/how-to-split-a-number-into-digits-in-r
+Purpose: Limit length of int
+
+Trim Character Strings to Specified Display Widths
+https://stat.ethz.ch/R-manual/R-devel/library/base/html/strtrim.html
+Purpose: Reduce length of string
+
+2016 Ohio Presidential Election Results
+https://www.politico.com/2016-election/results/map/president/ohio/
+https://en.wikipedia.org/wiki/United_States_presidential_election_in_Ohio,_2016
+Purpose: Data for election results
+
+Date Values
+https://www.statmethods.net/input/dates.html
+Purpose: convert date info using correct symbols
+
+5 Ways to Subset a Data Frame in R
+https://www.r-bloggers.com/5-ways-to-subset-a-data-frame-in-r/
+Purpose: Selecting rows
+
+Ohio County Look up by ZIP Code or City
+http://www.corragroup.com/ohio-county-lookup.html
+Purpose: Link counties and zip codes
+
+A Complete Tutorial on Time Series Modeling in R
+https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/
+Purpose: Resource for managing time series data
+
+Time Series in R Session 1.5 (Regression)
+https://www.youtube.com/watch?v=8HbFJN-0Ii0
+Purpose: Resource for managing time series data 
+
+Time Series Analysis
+http://r-statistics.co/Time-Series-Analysis-With-R.html
+Purpose: Resource for managing time series data
+
+Convert Titles to Title Case
+https://stat.ethz.ch/R-manual/R-devel/library/tools/html/toTitleCase.html
+Purpose: Capitalize first letter only
+
+Identifying and Removing Duplicate Data in R
+http://www.sthda.com/english/wiki/identifying-and-removing-duplicate-data-in-r
+Purpose: Remove duplicated values
+
+How to sort a dataframe by multiple column(s)?
+https://stackoverflow.com/questions/1296646/how-to-sort-a-dataframe-by-multiple-columns
+Purpose: Sort by multiple columns
+
+Use a list of values to select rows from a pandas dataframe [duplicate]
+https://stackoverflow.com/questions/12096252/use-a-list-of-values-to-select-rows-from-a-pandas-dataframe
+Purpose: Using isin
+
+Selecting pandas DataFrame Rows Based On Conditions
+https://chrisalbon.com/python/data_wrangling/pandas_selecting_rows_on_conditions/
+Purpose: Compare rows of two df's on multiple columns
+
+Python Pandas: Get index of rows which column matches certain value
+https://stackoverflow.com/questions/21800169/python-pandas-get-index-of-rows-which-column-matches-certain-value
+Purpose: Getting indices to list
+
+A box and whiskers plot (in the style of Tukey)
+http://ggplot2.tidyverse.org/reference/geom_boxplot.html
+Purpose: Changing outlier size/style
+
+R Tutorial: Data Frame
+http://www.r-tutor.com/r-introduction/data-frame
+Purpose: Creata  dataframe
+
+Plot Weekly or Monthly Totals in R
+https://gist.github.com/mollietaylor/5846843
+Purpose: Smooth time series plot
+
+multiple outliers in ggplot -> alpha to outlier.color
+https://stackoverflow.com/questions/10697504/multiple-outliers-in-ggplot-alpha-to-outlier-color
+Purpose: Alpha only on outliers
+
+List of cities in Ohio
+https://en.wikipedia.org/wiki/List_of_cities_in_Ohio
+Purpose: Match counties to major cities
+
+List of counties in Ohio
+https://en.wikipedia.org/wiki/List_of_counties_in_Ohio
+Purpose: Match counties to major cities
+
+Add "extra" line to legend of ggplot2
+https://community.rstudio.com/t/add-extra-line-to-legend-of-ggplot2/3675
+Purpose: Create legend from two separate line plots
+
+Colors (ggplot2)
+http://www.cookbook-r.com/Graphs/Colors_(ggplot2)/
+Purpose: Identifying color palette options
+
+Complete themes
+http://ggplot2.tidyverse.org/reference/ggtheme.html
+Purpose: Identify available themes
+
+How do I combine two data-frames based on two columns?
+https://stackoverflow.com/questions/6709151/how-do-i-combine-two-data-frames-based-on-two-columns
+Purpose: Merging dataframes based on two columns
+
+Different ways to set figure size in RMarkdown
+https://sebastiansauer.github.io/figure_sizing_knitr/
+Purpose: change default figure size in knitted html
+
+R Markdown Reference Guide
+https://www.rstudio.com/wp-content/uploads/2015/03/rmarkdown-reference.pdf
+Purpose: change behaviour of chunks
+
+Filtering a data frame on a vector [duplicate]
+https://stackoverflow.com/questions/9350025/filtering-a-data-frame-on-a-vector
+Purpose: subset if in an array of names
+
+How to specify “low” and “high” and get two scales on two ends using scale_fill_gradient
+https://stackoverflow.com/questions/26387670/how-to-specify-low-and-high-and-get-two-scales-on-two-ends-using-scale-fill
+Purpose: setting midpoint color for gradient scale
+
+How to replace NA values with another value in factors in R?
+https://datascience.stackexchange.com/questions/14273/how-to-replace-na-values-with-another-value-in-factors-in-r
+Purpose: filling na in a column with a specific value
+
+Subtracting two columns to give a new column in R
+https://stackoverflow.com/questions/23888037/subtracting-two-columns-to-give-a-new-column-in-r
+Purpose: Confirming dataframe column subtraction
+
+R Changing Order of Facets
+https://stackoverflow.com/questions/43290483/r-changing-order-of-facets/43290547#43290547
+Purpose: Change order of faceted plots
+
+ggplot2 Quick Reference: shape
+http://sape.inf.usi.ch/quick-reference/ggplot2/shape
+Purpose: Finding shapes for plotting
+
+Plotting individual observations and group means with ggplot2
+https://drsimonj.svbtle.com/plotting-individual-observations-and-group-means-with-ggplot2
+Purpose: Adding mean points to a faceted set of plots
+
+Making symbols bold in ggplot2
+https://stackoverflow.com/questions/40977292/making-symbols-bold-in-ggplot2
+Purpose: Bolding points in plot
+
+Force R to stop plotting abbreviated axis labels - e.g. 1e+00 in ggplot2
+https://stackoverflow.com/questions/14563989/force-r-to-stop-plotting-abbreviated-axis-labels-e-g-1e00-in-ggplot2
+Purpose: Use 10,000 instead of 1 e+4
+
+Opposite of %in%
+https://stackoverflow.com/questions/5831794/opposite-of-in
+Purpose: ! %in%
+
+R - do I need to add explicit new line character with print()?
+https://stackoverflow.com/questions/9317830/r-do-i-need-to-add-explicit-new-line-character-with-print
+Purpose: Add new line in title
+
+ggplot: How to change facet labels?
+https://stackoverflow.com/questions/3472980/ggplot-how-to-change-facet-labels
+Purpose: Changing the facet labels
+
+ggplot2 plot without axes, legends, etc
+https://stackoverflow.com/questions/6528180/ggplot2-plot-without-axes-legends-etc
+Purpose: Remove x-tick labels from plot
+
+Shading between two lines – ggplot
+https://www.r-bloggers.com/shading-between-two-lines-ggplot/
+Purpose: Ideas for creating shaded area
+
+R - Concatenate two dataframes?
+https://stackoverflow.com/questions/8169323/r-concatenate-two-dataframes
+Purpose: Join two dataframes
+
+ggplot2: use scale_colour_brewer() and specify legend name / entry labels manually
+https://stackoverflow.com/questions/23338830/ggplot2-use-scale-colour-brewer-and-specify-legend-name-entry-labels-manual
+Purpose: Changing legend name without disrupting the gradient scale
+
+ggplot2: scale_fill_brewer custom labels
+https://stackoverflow.com/questions/31090999/ggplot2-scale-fill-brewer-custom-labels?rq=1
+Purpose: Customize cutting labels
+
+escaping asterisks inside italic block
+https://github.com/adam-p/markdown-here/issues/287
+Purpose: add asterisk to markdown
+
+ggplot2 point shapes
+http://www.sthda.com/english/wiki/ggplot2-point-shapes
+Purpose: manually change shapes
+
+Creating Functions
+https://swcarpentry.github.io/r-novice-inflammation/02-func-R/
+Purpose: create a function with parameters
+
+ggplot2 add straight lines to a plot : horizontal, vertical and regression lines
+http://www.sthda.com/english/wiki/ggplot2-add-straight-lines-to-a-plot-horizontal-vertical-and-regression-lines
+Purpose: add horizontal lines
+
+Changing the line type in the ggplot legend
+https://stackoverflow.com/questions/14875582/changing-the-line-type-in-the-ggplot-legend
+Purpose: assign line type by aes
+
+How do I Clear Environment using an R command in the console?
+https://support.rstudio.com/hc/en-us/community/posts/202657367-How-do-I-Clear-Environment-using-an-R-command-in-the-console-
+Purpose: remove excess variables from environment
+
+Arranging multiple grobs on a page
+https://cran.r-project.org/web/packages/gridExtra/vignettes/arrangeGrob.html
+Purpose: Changing widths of plots in grid.arrange
