@@ -4,7 +4,7 @@ This project was complated as part of the course requirements of Udacity's [Data
 ## Overview
 The project used US Federal Election Commission data for contributions to candidates in the [2016 US Presidential Election](https://classic.fec.gov/disclosurep/PDownload.do) to investigate how contributions could be predicted election results in the bellwether state of Ohio. 
 
-An online version of the report can be found at my blog. 
+An online version of the report can be found at [my blog](https://rebeccaebarnes.github.io/2018/06/11/making-predictions). 
 
 The project involved data exploration and cleaning, completing Exploratory Data Analysis (EDA) by reviewing statistics and visualizations of data at the univariate, bivariate and multivariate levels, and then building a predictive model. 
 
