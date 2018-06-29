@@ -1,5 +1,5 @@
 # Explore &amp; Summarize Data
-This project was complated as part of the course requirements of Udacity's [Data Analyst Nanodegree](https://www.udacity.com/course/data-analyst-nanodegree--nd002) certification.
+This project was completed as part of the course requirements of Udacity's [Data Analyst Nanodegree](https://www.udacity.com/course/data-analyst-nanodegree--nd002) certification.
 
 ## Overview
 The project used US Federal Election Commission data for contributions to candidates in the [2016 US Presidential Election](https://classic.fec.gov/disclosurep/PDownload.do) to investigate how contributions could be predicted election results in the bellwether state of Ohio. 
